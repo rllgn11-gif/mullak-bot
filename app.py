@@ -1,4 +1,5 @@
 import os
+import time
 import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -11,7 +12,7 @@ CORS(app)
 
 # ===== المفاتيح =====
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")   # ← يجب أن يكون service_role key
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/")
 # ====================
@@ -26,97 +27,141 @@ def uid(req):
 # ===== العقارات =====
 @app.route("/api/properties", methods=["GET"])
 def get_properties():
-    res = supabase.table("properties").select("*").eq("user_id", uid(request)).execute()
-    return jsonify(res.data)
+    try:
+        res = supabase.table("properties").select("*").eq("user_id", uid(request)).execute()
+        return jsonify(res.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/properties", methods=["POST"])
 def add_property():
-    data = request.json
-    data["user_id"] = uid(request)
-    res = supabase.table("properties").insert(data).execute()
-    return jsonify(res.data[0])
+    try:
+        data = request.json
+        data["user_id"] = uid(request)
+        res = supabase.table("properties").insert(data).execute()
+        return jsonify(res.data[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/properties/<id>", methods=["DELETE"])
 def delete_property(id):
-    supabase.table("properties").delete().eq("id", id).eq("user_id", uid(request)).execute()
-    return jsonify({"ok": True})
+    try:
+        supabase.table("properties").delete().eq("id", id).eq("user_id", uid(request)).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ===== الوحدات =====
 @app.route("/api/units", methods=["GET"])
 def get_units():
-    prop_id = request.args.get("property_id")
-    q = supabase.table("units").select("*").eq("user_id", uid(request))
-    if prop_id:
-        q = q.eq("property_id", prop_id)
-    return jsonify(q.execute().data)
+    try:
+        prop_id = request.args.get("property_id")
+        q = supabase.table("units").select("*").eq("user_id", uid(request))
+        if prop_id:
+            q = q.eq("property_id", prop_id)
+        return jsonify(q.execute().data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/units", methods=["POST"])
 def add_unit():
-    data = request.json
-    data["user_id"] = uid(request)
-    res = supabase.table("units").insert(data).execute()
-    return jsonify(res.data[0])
+    try:
+        data = request.json
+        data["user_id"] = uid(request)
+        res = supabase.table("units").insert(data).execute()
+        return jsonify(res.data[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ===== المستأجرون =====
 @app.route("/api/tenants", methods=["GET"])
 def get_tenants():
-    res = supabase.table("tenants").select("*, properties(name, type)").eq("user_id", uid(request)).execute()
-    return jsonify(res.data)
+    try:
+        res = supabase.table("tenants").select("*, properties(name, type)").eq("user_id", uid(request)).execute()
+        return jsonify(res.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/tenants", methods=["POST"])
 def add_tenant():
-    data = request.json
-    data["user_id"] = uid(request)
-    res = supabase.table("tenants").insert(data).execute()
-    supabase.table("units").update({"tenant_name": data["name"]}).eq("property_id", data["property_id"]).eq("unit_num", data["unit_num"]).execute()
-    return jsonify(res.data[0])
+    try:
+        data = request.json
+        data["user_id"] = uid(request)
+        res = supabase.table("tenants").insert(data).execute()
+        supabase.table("units").update({"tenant_name": data["name"]}).eq("property_id", data["property_id"]).eq("unit_num", data["unit_num"]).execute()
+        return jsonify(res.data[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/tenants/<id>/pay", methods=["POST"])
 def pay_tenant(id):
-    res = supabase.table("tenants").update({"paid": True}).eq("id", id).eq("user_id", uid(request)).execute()
-    return jsonify(res.data[0])
+    try:
+        res = supabase.table("tenants").update({"paid": True}).eq("id", id).eq("user_id", uid(request)).execute()
+        return jsonify(res.data[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/tenants/reset", methods=["POST"])
 def reset_tenants():
-    supabase.table("tenants").update({"paid": False}).eq("user_id", uid(request)).execute()
-    return jsonify({"ok": True})
+    try:
+        supabase.table("tenants").update({"paid": False}).eq("user_id", uid(request)).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ===== المصروفات =====
 @app.route("/api/expenses", methods=["GET"])
 def get_expenses():
-    res = supabase.table("expenses").select("*").eq("user_id", uid(request)).order("created_at", desc=True).execute()
-    return jsonify(res.data)
+    try:
+        res = supabase.table("expenses").select("*").eq("user_id", uid(request)).order("created_at", desc=True).execute()
+        return jsonify(res.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/expenses", methods=["POST"])
 def add_expense():
-    data = request.json
-    data["user_id"] = uid(request)
-    res = supabase.table("expenses").insert(data).execute()
-    return jsonify(res.data[0])
+    try:
+        data = request.json
+        data["user_id"] = uid(request)
+        res = supabase.table("expenses").insert(data).execute()
+        return jsonify(res.data[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/expenses/<id>", methods=["DELETE"])
 def delete_expense(id):
-    supabase.table("expenses").delete().eq("id", id).eq("user_id", uid(request)).execute()
-    return jsonify({"ok": True})
+    try:
+        supabase.table("expenses").delete().eq("id", id).eq("user_id", uid(request)).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ===== الإحصائيات =====
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
-    u = uid(request)
-    props    = supabase.table("properties").select("*").eq("user_id", u).execute()
-    tenants  = supabase.table("tenants").select("*").eq("user_id", u).execute()
-    expenses = supabase.table("expenses").select("*").eq("user_id", u).execute()
-    paid_income = sum(t["rent"] for t in tenants.data if t["paid"])
-    inv_expense = sum(p["investor_rent"] for p in props.data if p["type"] == "مستثمر")
-    man_expense = sum(e["amount"] for e in expenses.data)
-    total_exp   = inv_expense + man_expense
-    return jsonify({
-        "props":    len(props.data),
-        "tenants":  len(tenants.data),
-        "income":   paid_income,
-        "expenses": total_exp,
-        "net":      paid_income - total_exp
-    })
+    try:
+        u = uid(request)
+        props    = supabase.table("properties").select("*").eq("user_id", u).execute()
+        tenants  = supabase.table("tenants").select("*").eq("user_id", u).execute()
+        expenses = supabase.table("expenses").select("*").eq("user_id", u).execute()
+        paid_income = sum(t["rent"] for t in tenants.data if t.get("paid"))
+        inv_expense = sum(p.get("investor_rent", 0) for p in props.data if p.get("type") == "مستثمر")
+        man_expense = sum(e.get("amount", 0) for e in expenses.data)
+        total_exp   = inv_expense + man_expense
+        return jsonify({
+            "props":    len(props.data),
+            "tenants":  len(tenants.data),
+            "income":   paid_income,
+            "expenses": total_exp,
+            "net":      paid_income - total_exp
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ===== Health Check =====
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "app": "مُلّاك"})
 
 # ===== تيليجرام بوت =====
 def app_keyboard():
@@ -136,8 +181,22 @@ def default(msg):
     bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
 
 def run_bot():
+    print("⏳ جاري تهيئة البوت...")
+    # ✅ الإصلاح الرئيسي: امسح أي webhook أو polling قديم قبل البدء
+    try:
+        bot.remove_webhook()
+        time.sleep(1)  # انتظر ثانية بعد المسح
+    except Exception as e:
+        print(f"⚠️ تحذير remove_webhook: {e}")
+
     print("✅ بوت مُلّاك يعمل...")
-    bot.polling(none_stop=True)
+    # ✅ استخدم skip_pending لتجاهل الرسائل القديمة
+    while True:
+        try:
+            bot.polling(none_stop=True, skip_pending=True, timeout=30, long_polling_timeout=30)
+        except Exception as e:
+            print(f"⚠️ خطأ في البوت، إعادة المحاولة بعد 5 ثواني: {e}")
+            time.sleep(5)
 
 # ===== تشغيل البوت في Thread منفصل =====
 if BOT_TOKEN:
