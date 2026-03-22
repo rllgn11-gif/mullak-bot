@@ -7,8 +7,8 @@ app = Flask(__name__)
 CORS(app)
 
 # ===== مفاتيح من Railway Variables =====
-SUPABASE_URL = os.environ.get("Project", "")
-SUPABASE_KEY = os.environ.get("service_role", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 # ========================================
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
