@@ -1,6 +1,4 @@
 import os
-import time
-import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from supabase import create_client
@@ -12,9 +10,10 @@ CORS(app)
 
 # ===== المفاتيح =====
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")   # ← يجب أن يكون service_role key
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/")
+RAILWAY_URL  = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
 # ====================
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -23,6 +22,29 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # ===== مساعد =====
 def uid(req):
     return req.headers.get("X-User-Id", "anonymous")
+
+# ===== Webhook تيليجرام =====
+@app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    if request.headers.get("content-type") == "application/json":
+        update = telebot.types.Update.de_json(request.data.decode("utf-8"))
+        bot.process_new_updates([update])
+    return "", 200
+
+# ===== Health Check =====
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "app": "مُلّاك"})
+
+# ===== ضبط الـ Webhook (افتحها مرة واحدة فقط) =====
+@app.route("/set_webhook", methods=["GET"])
+def set_webhook():
+    if not RAILWAY_URL:
+        return jsonify({"error": "أضف RAILWAY_PUBLIC_DOMAIN في Variables"}), 400
+    webhook_url = f"https://{RAILWAY_URL}/webhook/{BOT_TOKEN}"
+    bot.remove_webhook()
+    result = bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+    return jsonify({"ok": result, "webhook": webhook_url})
 
 # ===== العقارات =====
 @app.route("/api/properties", methods=["GET"])
@@ -158,11 +180,6 @@ def get_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ===== Health Check =====
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "app": "مُلّاك"})
-
 # ===== تيليجرام بوت =====
 def app_keyboard():
     markup = InlineKeyboardMarkup()
@@ -179,29 +196,6 @@ def start(msg):
 @bot.message_handler(func=lambda m: True)
 def default(msg):
     bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
-
-def run_bot():
-    print("⏳ جاري تهيئة البوت...")
-    # ✅ الإصلاح الرئيسي: امسح أي webhook أو polling قديم قبل البدء
-    try:
-        bot.remove_webhook()
-        time.sleep(1)  # انتظر ثانية بعد المسح
-    except Exception as e:
-        print(f"⚠️ تحذير remove_webhook: {e}")
-
-    print("✅ بوت مُلّاك يعمل...")
-    # ✅ استخدم skip_pending لتجاهل الرسائل القديمة
-    while True:
-        try:
-            bot.polling(none_stop=True, skip_pending=True, timeout=30, long_polling_timeout=30)
-        except Exception as e:
-            print(f"⚠️ خطأ في البوت، إعادة المحاولة بعد 5 ثواني: {e}")
-            time.sleep(5)
-
-# ===== تشغيل البوت في Thread منفصل =====
-if BOT_TOKEN:
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
