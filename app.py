@@ -755,6 +755,10 @@ def start(msg):
         reply_markup=app_keyboard()
     )
 
+@bot.message_handler(commands=["id"])
+def get_id(msg):
+    bot.reply_to(msg, f"🆔 ID: `{msg.from_user.id}`", parse_mode="Markdown")
+
 @bot.message_handler(func=lambda m: True)
 def default(msg):
     bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
