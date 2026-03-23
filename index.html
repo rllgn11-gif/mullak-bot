@@ -25,7 +25,6 @@
   .header{background:var(--surface);padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;}
   .header-title{font-size:16px;font-weight:700;}
   .back-btn{width:36px;height:36px;background:var(--card);border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;}
-  .pdf-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;border:none;border-radius:9px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
   .home-header{background:linear-gradient(135deg,#1e3a5f,#1a2235);padding:20px 20px 60px;}
   .home-greeting{font-size:13px;color:var(--muted);margin-bottom:4px;}
   .home-name{font-size:22px;font-weight:800;}
@@ -124,13 +123,11 @@
   .prop-select-item:active{transform:scale(.99);border-color:var(--accent);}
   .report-summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px;}
   .report-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;}
-  .report-card.full-width{grid-column:span 2;}
   .report-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;}
   .report-value{font-size:22px;font-weight:800;}
   .report-value.green{color:var(--green);}
   .report-value.red{color:var(--red);}
   .report-value.gold{color:var(--gold);}
-  .report-value.blue{color:var(--accent);}
   .report-value.teal{color:var(--teal);}
   .prop-report-card{background:var(--card);border:1px solid var(--border);border-radius:14px;margin:0 16px 12px;overflow:hidden;}
   .prop-report-header{background:linear-gradient(135deg,#1e3a5f,#1a2235);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;}
@@ -149,11 +146,9 @@
   .note-box{border-radius:12px;padding:14px;margin-bottom:16px;}
   .note-box.gold{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);}
   .note-box.blue{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);}
-  .note-box.red{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);}
   .note-title{font-size:12px;font-weight:700;margin-bottom:4px;}
   .note-box.gold .note-title{color:var(--gold);}
   .note-box.blue .note-title{color:var(--accent);}
-  .note-box.red .note-title{color:var(--red);}
   .note-text{font-size:12px;color:var(--muted);}
   .cat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px;}
   .cat-btn{padding:10px 4px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;line-height:1.4;}
@@ -169,21 +164,15 @@
   .empty-text{font-size:15px;}
   .bottom-safe{height:env(safe-area-inset-bottom,16px);}
   ::-webkit-scrollbar{width:0;}
-
-  /* ===== TOAST ===== */
-  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#1e2d45;border:1px solid var(--border);border-radius:14px;padding:14px 20px;font-size:14px;font-weight:600;z-index:9999;transition:transform .3s ease,opacity .3s;opacity:0;max-width:90vw;text-align:center;pointer-events:none;}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#1e2d45;border:1px solid var(--border);border-radius:14px;padding:14px 20px;font-size:13px;font-weight:600;z-index:9999;transition:transform .3s,opacity .3s;opacity:0;max-width:90vw;text-align:center;pointer-events:none;}
   #toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
   #toast.error{border-color:var(--red);color:var(--red);}
   #toast.success{border-color:var(--green);color:var(--green);}
-
-  /* ===== SPINNER ===== */
-  .spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:8px;}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:6px;}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-
-<!-- TOAST -->
 <div id="toast"></div>
 
 <!-- SPLASH -->
@@ -222,7 +211,7 @@
   </div>
   <div class="section-title">التقارير</div>
   <div class="menu-grid">
-    <div class="menu-card orange" onclick="goTo('report')"><div class="menu-icon">📈</div><div class="menu-label">التقرير الإجمالي</div><div class="menu-sub">+ PDF تصدير</div></div>
+    <div class="menu-card orange" onclick="goTo('report')"><div class="menu-icon">📈</div><div class="menu-label">التقرير الإجمالي</div><div class="menu-sub">ملخص مالي كامل</div></div>
     <div class="menu-card blue" onclick="goTo('propReports')"><div class="menu-icon">🏗️</div><div class="menu-label">تقرير العقارات</div><div class="menu-sub">كل عقار على حدة</div></div>
     <div class="menu-card red" onclick="goTo('reminders')"><div class="menu-icon">🔔</div><div class="menu-label">التذكيرات</div><div class="menu-sub">من لم يدفع بعد</div></div>
     <div class="menu-card green" onclick="goTo('listTenants')"><div class="menu-icon">👥</div><div class="menu-label">المستأجرون</div><div class="menu-sub">قائمة المستأجرين</div></div>
@@ -337,7 +326,7 @@
   <div class="form-body">
     <div class="form-group">
       <label class="form-label">تصنيف المصروف</label>
-      <div class="cat-grid" id="expCatGrid">
+      <div class="cat-grid">
         <button class="cat-btn selected" onclick="selectExpCat(this,'صيانة')">🔧 صيانة</button>
         <button class="cat-btn" onclick="selectExpCat(this,'رواتب')">👷 رواتب</button>
         <button class="cat-btn" onclick="selectExpCat(this,'فواتير')">💡 فواتير</button>
@@ -360,9 +349,9 @@
   <div class="list-body" id="expensesList"></div>
 </div>
 
-<!-- التقرير الإجمالي -->
+<!-- التقرير -->
 <div class="screen" id="report">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">التقرير الإجمالي</div><button class="pdf-btn" onclick="exportPDF()">📄 PDF</button></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">التقرير الإجمالي</div><div style="width:36px"></div></div>
   <div id="reportContent"></div>
 </div>
 
@@ -395,613 +384,466 @@
 </div>
 
 <script>
-  const API = 'https://mullak-bot-production.up.railway.app';
+// ============================================================
+// ⚠️ غيّر هذا فقط — رابط Railway الخاص بك
+// ============================================================
+const API = 'https://mullak-bot-production.up.railway.app';
+// ============================================================
 
-  let userId = 'anonymous';
-  let nav = ['home'];
-  let props = [], tenants = [], expenses = [];
-  let selectedPropId = null;
-  let currentPropType = 'مالك';
-  let currentPropContractType = 'أشهر';
-  let selectedMonths = 1;
-  let currentTenantPeriod = 'يوم';
-  let currentExpCat = 'صيانة';
+let jwtToken = null;
+let nav = ['home'];
+let props = [], tenants = [], expenses = [];
+let selectedPropId = null;
+let currentPropType = 'مالك';
+let currentPropContractType = 'أشهر';
+let selectedMonths = 1;
+let currentTenantPeriod = 'يوم';
+let currentExpCat = 'صيانة';
 
-  function fmt(n) { return Number(n||0).toLocaleString('ar-SA'); }
-  const catIcons = {'صيانة':'🔧','رواتب':'👷','فواتير':'💡','تسويق':'📢','قانوني':'⚖️','أخرى':'📦'};
+const fmt = n => Number(n||0).toLocaleString('ar-SA');
+const catIcons = {'صيانة':'🔧','رواتب':'👷','فواتير':'💡','تسويق':'📢','قانوني':'⚖️','أخرى':'📦'};
 
-  // ===== TOAST =====
-  let toastTimer;
-  function showToast(msg, type='success') {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'show ' + type;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.className = ''; }, 3500);
-  }
+// ============================================================
+// 🔔 Toast
+// ============================================================
+let toastTimer;
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3500);
+}
 
-  // ===== API CALLS - مع معالجة الأخطاء =====
-  async function api(method, path, body) {
-    try {
-      const res = await fetch(API + path, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const errMsg = data.error || data.message || 'خطأ في الخادم';
-        throw new Error(errMsg);
-      }
-      return data;
-    } catch(e) {
-      if (e.message.includes('fetch') || e.message.includes('network') || e.message.includes('Failed')) {
-        throw new Error('تعذّر الاتصال بالخادم — تحقق من الإنترنت');
-      }
-      throw e;
+function setBtn(id, loading, label) {
+  const b = document.getElementById(id); if (!b) return;
+  b.disabled = loading;
+  b.innerHTML = loading ? `${label} <span class="spinner"></span>` : label;
+}
+
+// ============================================================
+// 🔐 API مع JWT
+// ============================================================
+async function api(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+
+  const res = await fetch(API + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    // لو انتهى JWT أعد تسجيل الدخول
+    if (res.status === 401) {
+      jwtToken = null;
+      await login();
+      return api(method, path, body); // أعد المحاولة
     }
+    throw new Error(data.error || 'خطأ في الخادم');
+  }
+  return data;
+}
+
+// ============================================================
+// 🔐 تسجيل الدخول عبر تيليجرام
+// ============================================================
+async function login() {
+  const tg = window.Telegram.WebApp;
+
+  // ✅ initData (وليس initDataUnsafe) — هذا الآمن
+  const initData = tg.initData;
+
+  if (!initData) {
+    // وضع التطوير (خارج تيليجرام)
+    console.warn('⚠️ لا يوجد initData — وضع تطوير');
+    jwtToken = 'dev_mode';
+    return;
   }
 
-  // زر مع حالة تحميل
-  function setLoading(btnId, loading, label) {
-    const btn = document.getElementById(btnId);
-    if(!btn) return;
-    btn.disabled = loading;
-    btn.innerHTML = loading ? `${label} <span class="spinner"></span>` : label;
-  }
+  try {
+    const res = await fetch(`${API}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData })
+    });
 
-  // ===== TELEGRAM =====
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'فشل التحقق');
+
+    jwtToken = data.token;
+    document.getElementById('userName').textContent = data.first_name || 'مُلّاك';
+
+    console.log('✅ تم تسجيل الدخول:', data.first_name);
+
+  } catch(e) {
+    toast('❌ فشل تسجيل الدخول: ' + e.message, 'error');
+    throw e;
+  }
+}
+
+// ============================================================
+// 🚀 بدء التشغيل
+// ============================================================
+async function init() {
   try {
     const tg = window.Telegram.WebApp;
-    tg.ready(); tg.expand();
-    if (tg.initDataUnsafe?.user) {
-      userId = String(tg.initDataUnsafe.user.id);
-      document.getElementById('userName').textContent = tg.initDataUnsafe.user.first_name;
-    }
+    tg.ready();
+    tg.expand();
+
+    // تسجيل الدخول أولاً
+    await login();
+
+    // الانتقال للرئيسية
+    setTimeout(() => goTo('home'), 1500);
+
+  } catch(e) {
+    console.error('Init error:', e);
+    setTimeout(() => goTo('home'), 1500);
+  }
+}
+
+// ============================================================
+// 🧭 التنقل
+// ============================================================
+function goTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screen).classList.add('active');
+  window.scrollTo(0, 0);
+  if (screen !== nav[nav.length - 1]) nav.push(screen);
+  const renders = {
+    home: loadHome, addUnits: renderUnitPropList,
+    addTenant: renderTenantForm, addExpense: renderExpenseForm,
+    paid: loadPaidList, listExpenses: loadExpensesList,
+    report: loadReport, propReports: loadPropReports,
+    reminders: loadReminders, listTenants: loadTenantList
+  };
+  if (renders[screen]) renders[screen]();
+}
+
+function goBack() {
+  nav.pop();
+  const prev = nav[nav.length - 1] || 'home';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(prev).classList.add('active');
+  window.scrollTo(0, 0);
+  if (prev === 'home') loadHome();
+}
+
+// ============================================================
+// 🏠 الرئيسية
+// ============================================================
+async function loadHome() {
+  try {
+    const stats = await api('GET', '/api/stats');
+    document.getElementById('statProps').textContent    = stats.props ?? 0;
+    document.getElementById('statTenants').textContent  = stats.tenants ?? 0;
+    document.getElementById('statIncome').textContent   = fmt(stats.income);
+    document.getElementById('statExpenses').textContent = fmt(stats.expenses);
+    const ne = document.getElementById('statProfit');
+    ne.textContent = fmt(stats.net);
+    ne.style.color = (stats.net || 0) >= 0 ? 'var(--gold)' : 'var(--red)';
+  } catch(e) { toast('⚠️ ' + e.message, 'error'); }
+}
+
+// ============================================================
+// 🏗️ العقارات
+// ============================================================
+function setPropType(type) {
+  currentPropType = type;
+  const isInv = type === 'مستثمر';
+  document.getElementById('propFormTitle').textContent = isInv ? 'إضافة عقار — مستثمر' : 'إضافة عقار — مالك';
+  document.getElementById('propTypeBadge').innerHTML = isInv
+    ? '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(245,158,11,.12);color:var(--gold);border:1px solid var(--gold);">💼 مستثمر</span>'
+    : '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(59,130,246,.12);color:var(--accent);border:1px solid var(--accent);">🏠 مالك</span>';
+  document.getElementById('investorRentBox').style.display = isInv ? 'block' : 'none';
+  currentPropContractType = 'أشهر'; selectedMonths = 1;
+  buildMonthsGrid(); setPropContractType('أشهر');
+  setBtn('savePropBtn', false, 'إضافة العقار 🏗️');
+}
+
+function buildMonthsGrid() {
+  const g = document.getElementById('monthsGrid'); if (!g) return; g.innerHTML = '';
+  for (let i = 1; i <= 11; i++) { const b = document.createElement('button'); b.className = 'month-btn' + (i === selectedMonths ? ' selected' : ''); b.textContent = i; b.onclick = () => selectMonth(i); g.appendChild(b); }
+}
+
+function selectMonth(n) {
+  selectedMonths = n;
+  document.querySelectorAll('.month-btn').forEach((b, i) => { b.className = 'month-btn' + (i + 1 === n ? ' selected' : ''); });
+}
+
+function setPropContractType(type) {
+  currentPropContractType = type;
+  const tm = document.getElementById('propTabMonth'), ty = document.getElementById('propTabYear');
+  const mp = document.getElementById('monthsPickerBox'), yb = document.getElementById('yearsBox');
+  if (!tm) return;
+  if (type === 'أشهر') { tm.className = 'tab-btn active-month'; ty.className = 'tab-btn'; mp.style.display = 'block'; yb.style.display = 'none'; }
+  else { ty.className = 'tab-btn active-annual'; tm.className = 'tab-btn'; mp.style.display = 'none'; yb.style.display = 'block'; }
+}
+
+async function saveProperty() {
+  const name = document.getElementById('propName').value.trim();
+  const loc  = document.getElementById('propLocation').value.trim();
+  if (!name) { toast('⚠️ أدخل اسم العقار', 'error'); return; }
+  if (!loc)  { toast('⚠️ أدخل موقع العقار', 'error'); return; }
+  const isInv = currentPropType === 'مستثمر';
+  let contractDesc = '', investorRent = 0;
+  if (isInv) {
+    investorRent = parseInt(document.getElementById('propInvestorRent').value || 0);
+    if (!investorRent) { toast('⚠️ أدخل المبلغ المدفوع للمالك', 'error'); return; }
+    const yr = parseInt(document.getElementById('propYears')?.value || 1);
+    contractDesc = currentPropContractType === 'أشهر' ? selectedMonths + ' شهر' : yr + (yr === 1 ? ' سنة' : ' سنوات');
+  }
+  setBtn('savePropBtn', true, 'جاري الحفظ...');
+  try {
+    await api('POST', '/api/properties', { name, location: loc, type: currentPropType, investor_rent: investorRent, contract_desc: contractDesc });
+    ['propName','propLocation','propInvestorRent','propYears'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    showSuccess('تم إضافة العقار! 🏗️', isInv ? `${name} — ${loc}\n📋 ${contractDesc} · 💸 ${fmt(investorRent)} ريال` : `${name} — ${loc}`);
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('savePropBtn', false, 'إضافة العقار 🏗️'); }
+}
+
+// ============================================================
+// 🚪 الوحدات
+// ============================================================
+async function renderUnitPropList() {
+  const list = document.getElementById('unitPropList');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    props = await api('GET', '/api/properties');
+    if (!props.length) { list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات — أضف عقاراً أولاً</div></div>'; return; }
+    list.innerHTML = props.map(p => `<div class="prop-select-item" onclick="selectPropForUnit('${p.id}','${p.name.replace(/'/g,"\\'")}')"><div style="font-size:28px">${p.type==='مستثمر'?'💼':'🏠'}</div><div style="flex:1;"><div style="font-weight:700;font-size:15px">${p.name}</div><div style="font-size:12px;color:var(--muted)">${p.location}</div></div><span class="list-item-badge badge-${p.type==='مستثمر'?'gold':'blue'}">${p.type}</span></div>`).join('');
+  } catch(e) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; toast('❌ ' + e.message, 'error'); }
+}
+
+function selectPropForUnit(id, name) { selectedPropId = id; document.getElementById('unitPropTitle').textContent = name; goTo('addUnitType'); }
+
+async function selectUnit(type) {
+  if (!selectedPropId) { toast('⚠️ لم يتم اختيار العقار', 'error'); return; }
+  document.querySelectorAll('.unit-card').forEach(c => c.style.pointerEvents = 'none');
+  try {
+    const units = await api('GET', `/api/units?property_id=${selectedPropId}`);
+    const num = units.length + 1;
+    await api('POST', '/api/units', { property_id: selectedPropId, unit_num: num, unit_type: type });
+    showSuccess('تم إضافة الوحدة! 🚪', `${type} رقم ${num}`);
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { document.querySelectorAll('.unit-card').forEach(c => c.style.pointerEvents = ''); }
+}
+
+// ============================================================
+// 🧑‍💼 المستأجرون
+// ============================================================
+async function renderTenantForm() {
+  try {
+    props = await api('GET', '/api/properties');
+    const sel = document.getElementById('tenantProp');
+    sel.innerHTML = '<option value="">اختر العقار</option>';
+    props.forEach(p => { sel.innerHTML += `<option value="${p.id}">${p.name} (${p.type})</option>`; });
+    document.getElementById('tenantUnit').innerHTML = '<option value="">اختر الوحدة</option>';
+    currentTenantPeriod = 'يوم'; setTenantPeriod('يوم');
+    setBtn('saveTenantBtn', false, 'إضافة المستأجر 🧑‍💼');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
+function setTenantPeriod(p) {
+  currentTenantPeriod = p;
+  ['tenTabDay','tenTabMonth','tenTabYear'].forEach(id => document.getElementById(id).className = 'tab-btn');
+  const cl = document.getElementById('tenantCountLabel');
+  if (p==='يوم') { document.getElementById('tenTabDay').className='tab-btn active-day'; cl.textContent='عدد الأيام'; }
+  if (p==='شهر') { document.getElementById('tenTabMonth').className='tab-btn active-month'; cl.textContent='عدد الأشهر'; }
+  if (p==='سنة') { document.getElementById('tenTabYear').className='tab-btn active-annual'; cl.textContent='عدد السنوات'; }
+}
+
+async function updateUnitSelect() {
+  const propId = document.getElementById('tenantProp').value;
+  const unitSel = document.getElementById('tenantUnit');
+  unitSel.innerHTML = '<option value="">جاري التحميل...</option>';
+  if (!propId) { unitSel.innerHTML = '<option value="">اختر الوحدة</option>'; return; }
+  try {
+    const units = await api('GET', `/api/units?property_id=${propId}`);
+    unitSel.innerHTML = '<option value="">اختر الوحدة</option>';
+    if (!units.length) { unitSel.innerHTML = '<option value="">لا توجد وحدات — أضف وحدات أولاً</option>'; return; }
+    units.forEach(u => { unitSel.innerHTML += `<option value="${u.unit_num}" ${u.tenant_name?'disabled':''}>${u.unit_type} رقم ${u.unit_num}${u.tenant_name?' — '+u.tenant_name+' (مشغولة)':''}</option>`; });
+  } catch(e) { unitSel.innerHTML = '<option value="">خطأ في التحميل</option>'; }
+}
+
+async function saveTenant() {
+  const name = document.getElementById('tenantName').value.trim();
+  const phone = document.getElementById('tenantPhone').value.trim();
+  const propId = document.getElementById('tenantProp').value;
+  const unitNum = document.getElementById('tenantUnit').value;
+  const count = parseInt(document.getElementById('tenantCount').value || 1);
+  const rent = parseInt(document.getElementById('tenantRent').value || 0);
+  if (!name)   { toast('⚠️ أدخل اسم المستأجر', 'error'); return; }
+  if (!phone)  { toast('⚠️ أدخل رقم الهاتف', 'error'); return; }
+  if (!propId) { toast('⚠️ اختر العقار', 'error'); return; }
+  if (!unitNum){ toast('⚠️ اختر الوحدة', 'error'); return; }
+  if (!rent)   { toast('⚠️ أدخل مبلغ الإيجار', 'error'); return; }
+  let pl = '';
+  if (currentTenantPeriod==='يوم') pl = count+(count===1?' يوم':' أيام');
+  if (currentTenantPeriod==='شهر') pl = count+(count===1?' شهر':' أشهر');
+  if (currentTenantPeriod==='سنة') pl = count+(count===1?' سنة':' سنوات');
+  const prop = props.find(p => p.id === propId);
+  setBtn('saveTenantBtn', true, 'جاري الحفظ...');
+  try {
+    await api('POST', '/api/tenants', { name, phone, property_id: propId, unit_num: parseInt(unitNum), rent, period: currentTenantPeriod, period_count: count, period_label: pl });
+    ['tenantName','tenantPhone','tenantRent','tenantCount'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    showSuccess('تم إضافة المستأجر! 🧑‍💼', `${name}\n🏗️ ${prop?.name} · 🚪 وحدة ${unitNum}\n📋 ${pl} · 💰 ${fmt(rent)} ريال`);
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('saveTenantBtn', false, 'إضافة المستأجر 🧑‍💼'); }
+}
+
+// ============================================================
+// 💳 الدفعات
+// ============================================================
+async function loadPaidList() {
+  const list = document.getElementById('paidList');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    tenants = await api('GET', '/api/tenants');
+    if (!tenants.length) { list.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">لا يوجد مستأجرون بعد</div></div>'; return; }
+    const icon = t => t.period==='يوم'?'☀️':t.period==='شهر'?'📅':'📆';
+    list.innerHTML = tenants.map(t => `<div class="list-item" onclick="markPaid('${t.id}','${t.name.replace(/'/g,"\\'")}',${t.rent},'${t.period_label||''}')"><div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${t.name}</div><div class="list-item-sub">${t.properties?.name||''} · وحدة ${t.unit_num}<br>${icon(t)} ${t.period_label||''} · ${fmt(t.rent)} ريال</div></div><span class="list-item-badge ${t.paid?'badge-green':'badge-red'}">${t.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('');
+  } catch(e) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
+
+async function markPaid(id, name, rent, pl) {
+  const t = tenants.find(x => x.id === id);
+  if (t?.paid) { toast('✅ تم تسجيل الدفعة مسبقاً'); return; }
+  try {
+    await api('POST', `/api/tenants/${id}/pay`);
+    document.getElementById('paidSuccessSub').textContent = `${name}\n${pl} · ${fmt(rent)} ريال\n\nهل تريد تسجيل مصروف مرتبط؟`;
+    goTo('paidSuccess');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
+// ============================================================
+// 📤 المصروفات
+// ============================================================
+async function renderExpenseForm() {
+  try {
+    props = await api('GET', '/api/properties');
+    const sel = document.getElementById('expProp');
+    sel.innerHTML = '<option value="">— غير مرتبط —</option>';
+    props.forEach(p => { sel.innerHTML += `<option value="${p.id}">${p.name}</option>`; });
+    document.getElementById('expUnit').innerHTML = '<option value="">— غير مرتبط —</option>';
+    currentExpCat = 'صيانة';
+    document.querySelectorAll('.cat-btn').forEach((b, i) => { b.className = 'cat-btn' + (i === 0 ? ' selected' : ''); });
+    setBtn('saveExpBtn', false, 'تسجيل المصروف 📤');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
+async function updateExpUnitSelect() {
+  const propId = document.getElementById('expProp').value;
+  const unitSel = document.getElementById('expUnit');
+  unitSel.innerHTML = '<option value="">— غير مرتبط —</option>';
+  if (!propId) return;
+  try {
+    const units = await api('GET', `/api/units?property_id=${propId}`);
+    units.forEach(u => { unitSel.innerHTML += `<option value="${u.unit_num}">${u.unit_type} رقم ${u.unit_num}</option>`; });
   } catch(e) {}
+}
 
-  // ===== NAVIGATION =====
-  function goTo(screen) {
-    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-    document.getElementById(screen).classList.add('active');
-    window.scrollTo(0,0);
-    if (screen !== nav[nav.length-1]) nav.push(screen);
-    const renders = {
-      home: loadHome,
-      addUnits: renderUnitPropList,
-      addTenant: renderTenantForm,
-      addExpense: renderExpenseForm,
-      paid: loadPaidList,
-      listExpenses: loadExpensesList,
-      report: loadReport,
-      propReports: loadPropReports,
-      reminders: loadReminders,
-      listTenants: loadTenantList
-    };
-    if (renders[screen]) renders[screen]();
-  }
+function selectExpCat(el, cat) { currentExpCat = cat; document.querySelectorAll('.cat-btn').forEach(b => b.className = 'cat-btn'); el.className = 'cat-btn selected'; }
 
-  function goBack() {
-    nav.pop();
-    const prev = nav[nav.length-1]||'home';
-    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-    document.getElementById(prev).classList.add('active');
-    window.scrollTo(0,0);
-    if (prev==='home') loadHome();
-  }
+async function saveExpense() {
+  const desc = document.getElementById('expDesc').value.trim();
+  const amount = parseInt(document.getElementById('expAmount').value || 0);
+  if (!desc)   { toast('⚠️ أدخل وصف المصروف', 'error'); return; }
+  if (!amount) { toast('⚠️ أدخل مبلغ المصروف', 'error'); return; }
+  const propId = document.getElementById('expProp').value;
+  const unit = document.getElementById('expUnit').value;
+  setBtn('saveExpBtn', true, 'جاري الحفظ...');
+  try {
+    await api('POST', '/api/expenses', { category: currentExpCat, description: desc, amount, property_id: propId || null, unit_num: unit ? parseInt(unit) : null });
+    document.getElementById('expDesc').value = '';
+    document.getElementById('expAmount').value = '';
+    showSuccess('تم تسجيل المصروف! 📤', `${currentExpCat}: ${desc}\n💸 ${fmt(amount)} ريال`);
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('saveExpBtn', false, 'تسجيل المصروف 📤'); }
+}
 
-  // ===== LOAD HOME =====
-  async function loadHome() {
-    try {
-      const stats = await api('GET', '/api/stats');
-      document.getElementById('statProps').textContent    = stats.props ?? 0;
-      document.getElementById('statTenants').textContent  = stats.tenants ?? 0;
-      document.getElementById('statIncome').textContent   = fmt(stats.income);
-      document.getElementById('statExpenses').textContent = fmt(stats.expenses);
-      const ne = document.getElementById('statProfit');
-      ne.textContent = fmt(stats.net);
-      ne.style.color = (stats.net||0) >= 0 ? 'var(--gold)' : 'var(--red)';
-    } catch(e) {
-      showToast('⚠️ ' + e.message, 'error');
-    }
-  }
+async function loadExpensesList() {
+  const list = document.getElementById('expensesList');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    expenses = await api('GET', '/api/expenses');
+    if (!expenses.length) { list.innerHTML = '<div class="empty-state"><div class="empty-icon">📤</div><div class="empty-text">لا توجد مصروفات</div></div>'; return; }
+    const total = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    list.innerHTML = `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;"><div style="font-size:12px;color:var(--muted);">إجمالي المصروفات</div><div style="font-size:20px;font-weight:800;color:var(--red);">${fmt(total)} ريال</div></div>${expenses.map(e=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon red">${catIcons[e.category]||'📦'}</div><div class="list-item-info"><div class="list-item-name">${e.description}</div><div class="list-item-sub">${e.category}${e.unit_num?' · وحدة '+e.unit_num:''}</div></div><span class="list-item-badge badge-red">${fmt(e.amount)} ريال</span></div>`).join('')}`;
+  } catch(e) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
 
-  // ===== PROPERTY =====
-  function setPropType(type) {
-    currentPropType = type;
-    const isInv = type === 'مستثمر';
-    document.getElementById('propFormTitle').textContent = isInv ? 'إضافة عقار — مستثمر' : 'إضافة عقار — مالك';
-    document.getElementById('propTypeBadge').innerHTML = isInv
-      ? '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(245,158,11,.12);color:var(--gold);border:1px solid var(--gold);">💼 مستثمر</span>'
-      : '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(59,130,246,.12);color:var(--accent);border:1px solid var(--accent);">🏠 مالك</span>';
-    document.getElementById('investorRentBox').style.display = isInv ? 'block' : 'none';
-    currentPropContractType = 'أشهر'; selectedMonths = 1;
-    buildMonthsGrid(); setPropContractType('أشهر');
-    // reset save btn
-    setLoading('savePropBtn', false, 'إضافة العقار 🏗️');
-  }
+// ============================================================
+// 📊 التقارير
+// ============================================================
+async function loadReport() {
+  const c = document.getElementById('reportContent');
+  c.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const [stats, t, e] = await Promise.all([api('GET','/api/stats'), api('GET','/api/tenants'), api('GET','/api/expenses')]);
+    const total = t.reduce((s,x)=>s+(x.rent||0),0);
+    c.innerHTML = `<div class="report-summary"><div class="report-card"><div class="report-label">📥 إجمالي الواردات</div><div class="report-value teal">${fmt(total)}</div></div><div class="report-card"><div class="report-label">✅ المحصّل</div><div class="report-value green">${fmt(stats.income)}</div></div><div class="report-card"><div class="report-label">📤 إجمالي المصروفات</div><div class="report-value red">${fmt(stats.expenses)}</div></div><div class="report-card"><div class="report-label">💰 صافي الربح</div><div class="report-value ${(stats.net||0)>=0?'gold':'red'}">${fmt(stats.net)}</div></div></div><div class="section-divider">🧑‍💼 المستأجرون</div><div style="padding:0 16px 20px;">${t.map(x=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon ${x.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${x.name}</div><div class="list-item-sub">${x.properties?.name||''} · وحدة ${x.unit_num} · ${x.period_label||''} · ${fmt(x.rent)} ريال</div></div><span class="list-item-badge ${x.paid?'badge-green':'badge-red'}">${x.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('')}</div>`;
+  } catch(e) { c.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
 
-  function buildMonthsGrid() {
-    const grid = document.getElementById('monthsGrid'); if(!grid) return;
-    grid.innerHTML = '';
-    for(let i=1;i<=11;i++){const btn=document.createElement('button');btn.className='month-btn'+(i===selectedMonths?' selected':'');btn.textContent=i;btn.onclick=()=>selectMonth(i);grid.appendChild(btn);}
-  }
+async function loadPropReports() {
+  const c = document.getElementById('propReportsContent');
+  c.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const [ap,at,ae,au] = await Promise.all([api('GET','/api/properties'),api('GET','/api/tenants'),api('GET','/api/expenses'),api('GET','/api/units')]);
+    if (!ap.length) { c.innerHTML = '<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات</div></div>'; return; }
+    c.innerHTML = ap.map(prop => {
+      const isInv=prop.type==='مستثمر', pt=at.filter(t=>t.property_id===prop.id), pe=ae.filter(e=>e.property_id===prop.id), pu=au.filter(u=>u.property_id===prop.id);
+      const inc=pt.filter(t=>t.paid).reduce((s,t)=>s+(t.rent||0),0), tot=pt.reduce((s,t)=>s+(t.rent||0),0), exp=(isInv?(prop.investor_rent||0):0)+pe.reduce((s,e)=>s+(e.amount||0),0), net=inc-exp;
+      const units=pu.map(u=>{const ut=pt.find(t=>t.unit_num===u.unit_num),uI=ut?.paid?(ut.rent||0):0,uE=pe.filter(e=>e.unit_num===u.unit_num).reduce((s,e)=>s+(e.amount||0),0);return`<div class="unit-row"><div style="font-weight:700;font-size:13px;margin-bottom:6px;">${u.unit_type} رقم ${u.unit_num} · ${ut?ut.name:'فارغة'} ${ut?(ut.paid?'✅':'❌'):''}</div><div class="unit-fin-grid"><div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--teal)">${fmt(ut?.rent||0)}</div><div class="unit-fin-lbl">📥 الإيجار</div></div><div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--red)">${fmt(uE)}</div><div class="unit-fin-lbl">📤 المصاريف</div></div><div class="unit-fin-cell"><div class="unit-fin-val" style="color:${uI-uE>=0?'var(--gold)':'var(--red)'}">${fmt(uI-uE)}</div><div class="unit-fin-lbl">💰 الصافي</div></div></div></div>`;}).join('');
+      return`<div class="prop-report-card"><div class="prop-report-header"><div><div style="font-size:15px;font-weight:700;color:#f1f5f9;">${isInv?'💼':'🏠'} ${prop.name}</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;">📍 ${prop.location}${isInv&&prop.contract_desc?' · عقد: '+prop.contract_desc:''}</div></div><span style="background:${isInv?'rgba(245,158,11,.2)':'rgba(59,130,246,.2)'};color:${isInv?'var(--gold)':'var(--accent)'};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">${prop.type}</span></div><div class="prop-report-body"><div class="prop-financial-row"><div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--teal)">${fmt(tot)}</div><div class="prop-fin-label">📥 الإيجارات</div></div><div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--red)">${fmt(exp)}</div><div class="prop-fin-label">📤 المصاريف</div></div><div class="prop-fin-item"><div class="prop-fin-val" style="color:${net>=0?'var(--gold)':'var(--red)'}">${fmt(net)}</div><div class="prop-fin-label">💰 الصافي</div></div></div>${isInv?`<div style="background:rgba(245,158,11,.08);border-radius:8px;padding:8px;font-size:12px;color:var(--muted);margin-bottom:10px;">💸 إيجار المالك: <strong style="color:var(--gold)">${fmt(prop.investor_rent)} ريال</strong></div>`:''}${pu.length?`<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">🚪 تفصيل الوحدات</div>${units}`:''}</div></div>`;
+    }).join('');
+  } catch(e) { c.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
 
-  function selectMonth(n) {
-    selectedMonths = n;
-    document.querySelectorAll('.month-btn').forEach((btn,i)=>{ btn.className='month-btn'+(i+1===n?' selected':''); });
-  }
+async function loadReminders() {
+  const list = document.getElementById('reminderList');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const t = await api('GET', '/api/tenants');
+    const u = t.filter(x => !x.paid);
+    if (!u.length) { list.innerHTML = '<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-text">جميع المستأجرين دفعوا!</div></div>'; return; }
+    list.innerHTML = u.map(x => `<div class="list-item" style="cursor:default"><div class="list-item-icon red">🔔</div><div class="list-item-info"><div class="list-item-name">${x.name}</div><div class="list-item-sub">📱 ${x.phone} · ${x.properties?.name||''} · وحدة ${x.unit_num}<br>${x.period_label||''} · ${fmt(x.rent)} ريال</div></div><span class="list-item-badge badge-red">متأخر</span></div>`).join('');
+  } catch(e) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
 
-  function setPropContractType(type) {
-    currentPropContractType = type;
-    const tm=document.getElementById('propTabMonth'), ty=document.getElementById('propTabYear');
-    const mp=document.getElementById('monthsPickerBox'), yb=document.getElementById('yearsBox');
-    if(!tm) return;
-    if(type==='أشهر'){tm.className='tab-btn active-month';ty.className='tab-btn';mp.style.display='block';yb.style.display='none';}
-    else{ty.className='tab-btn active-annual';tm.className='tab-btn';mp.style.display='none';yb.style.display='block';}
-  }
+async function loadTenantList() {
+  const list = document.getElementById('tenantList');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const t = await api('GET', '/api/tenants');
+    if (!t.length) { list.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">لا يوجد مستأجرون</div></div>'; return; }
+    list.innerHTML = t.map(x => `<div class="list-item" style="cursor:default"><div class="list-item-icon ${x.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${x.name}</div><div class="list-item-sub">📱 ${x.phone} · ${x.properties?.name||''} · وحدة ${x.unit_num}<br>${x.period_label||''} · ${fmt(x.rent)} ريال</div></div><span class="list-item-badge ${x.paid?'badge-green':'badge-red'}">${x.paid?'✅':'❌'}</span></div>`).join('');
+  } catch(e) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`; }
+}
 
-  async function saveProperty() {
-    const name = document.getElementById('propName').value.trim();
-    const loc  = document.getElementById('propLocation').value.trim();
-    if(!name){ showToast('⚠️ أدخل اسم العقار', 'error'); return; }
-    if(!loc){  showToast('⚠️ أدخل موقع العقار', 'error'); return; }
+function showSuccess(title, sub) {
+  document.getElementById('successTitle').textContent = title;
+  document.getElementById('successSub').textContent = sub;
+  goTo('success');
+}
 
-    const isInv = currentPropType === 'مستثمر';
-    let contractDesc = '', investorRent = 0;
-    if(isInv){
-      investorRent = parseInt(document.getElementById('propInvestorRent').value||0);
-      if(!investorRent){ showToast('⚠️ أدخل المبلغ المدفوع للمالك', 'error'); return; }
-      const years = parseInt(document.getElementById('propYears')?.value||1);
-      contractDesc = currentPropContractType==='أشهر'
-        ? selectedMonths + ' شهر'
-        : years + (years===1?' سنة':' سنوات');
-    }
+function updateDateTime() {
+  const n = new Date();
+  const d = document.getElementById('currentDate'), t = document.getElementById('currentTime'), h = document.getElementById('hijriDate');
+  if (d) d.textContent = n.toLocaleDateString('ar-SA', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  if (t) t.textContent = '🕐 ' + n.toLocaleTimeString('ar-SA', {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  if (h) h.textContent = '🌙 ' + n.toLocaleDateString('ar-SA-u-ca-islamic', {year:'numeric',month:'long',day:'numeric'});
+}
 
-    setLoading('savePropBtn', true, 'جاري الحفظ...');
-    try {
-      const result = await api('POST', '/api/properties', {
-        name,
-        location: loc,
-        type: currentPropType,
-        investor_rent: investorRent,
-        contract_desc: contractDesc
-      });
-
-      if(!result || result.error) {
-        throw new Error(result?.error || 'فشل الحفظ');
-      }
-
-      // مسح الحقول
-      ['propName','propLocation','propInvestorRent','propYears'].forEach(id=>{
-        const el=document.getElementById(id); if(el) el.value='';
-      });
-
-      showSuccess('تم إضافة العقار! 🏗️',
-        isInv ? `${name} — ${loc}\n📋 ${contractDesc} · 💸 ${fmt(investorRent)} ريال`
-               : `${name} — ${loc}`);
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    } finally {
-      setLoading('savePropBtn', false, 'إضافة العقار 🏗️');
-    }
-  }
-
-  // ===== UNITS =====
-  async function renderUnitPropList() {
-    const list = document.getElementById('unitPropList');
-    list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      props = await api('GET', '/api/properties');
-      if(!props.length){
-        list.innerHTML='<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات — أضف عقاراً أولاً</div></div>';
-        return;
-      }
-      list.innerHTML = props.map(p=>{
-        const isInv = p.type==='مستثمر';
-        return `<div class="prop-select-item" onclick="selectPropForUnit('${p.id}','${escHtml(p.name)}')">
-          <div style="font-size:28px">${isInv?'💼':'🏠'}</div>
-          <div style="flex:1;"><div style="font-weight:700;font-size:15px">${p.name}</div><div style="font-size:12px;color:var(--muted)">${p.location}</div></div>
-          <span class="list-item-badge badge-${isInv?'gold':'blue'}">${p.type}</span>
-        </div>`;
-      }).join('');
-    } catch(e) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  function selectPropForUnit(id, name) {
-    selectedPropId = id;
-    document.getElementById('unitPropTitle').textContent = name;
-    goTo('addUnitType');
-  }
-
-  async function selectUnit(type) {
-    if(!selectedPropId){ showToast('⚠️ لم يتم اختيار العقار', 'error'); return; }
-    // تعطيل الكروت مؤقتاً
-    document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='none');
-    try {
-      const units = await api('GET', `/api/units?property_id=${selectedPropId}`);
-      const num = units.length + 1;
-      const result = await api('POST', '/api/units', {
-        property_id: selectedPropId,
-        unit_num: num,
-        unit_type: type
-      });
-      if(!result || result.error) throw new Error(result?.error || 'فشل الحفظ');
-      showSuccess('تم إضافة الوحدة! 🚪', `${type} رقم ${num}`);
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    } finally {
-      document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='');
-    }
-  }
-
-  // ===== TENANT =====
-  async function renderTenantForm() {
-    try {
-      props = await api('GET', '/api/properties');
-      const sel = document.getElementById('tenantProp');
-      sel.innerHTML = '<option value="">اختر العقار</option>';
-      props.forEach(p=>{ sel.innerHTML += `<option value="${p.id}">${p.name} (${p.type})</option>`; });
-      document.getElementById('tenantUnit').innerHTML = '<option value="">اختر الوحدة</option>';
-      currentTenantPeriod = 'يوم'; setTenantPeriod('يوم');
-      setLoading('saveTenantBtn', false, 'إضافة المستأجر 🧑‍💼');
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  function setTenantPeriod(period) {
-    currentTenantPeriod = period;
-    ['tenTabDay','tenTabMonth','tenTabYear'].forEach(id=>document.getElementById(id).className='tab-btn');
-    const cl = document.getElementById('tenantCountLabel');
-    if(period==='يوم'){document.getElementById('tenTabDay').className='tab-btn active-day';cl.textContent='عدد الأيام';}
-    if(period==='شهر'){document.getElementById('tenTabMonth').className='tab-btn active-month';cl.textContent='عدد الأشهر';}
-    if(period==='سنة'){document.getElementById('tenTabYear').className='tab-btn active-annual';cl.textContent='عدد السنوات';}
-  }
-
-  async function updateUnitSelect() {
-    const propId = document.getElementById('tenantProp').value;
-    const unitSel = document.getElementById('tenantUnit');
-    unitSel.innerHTML = '<option value="">جاري التحميل...</option>';
-    if(!propId){ unitSel.innerHTML='<option value="">اختر الوحدة</option>'; return; }
-    try {
-      const units = await api('GET', `/api/units?property_id=${propId}`);
-      unitSel.innerHTML = '<option value="">اختر الوحدة</option>';
-      if(!units.length){
-        unitSel.innerHTML = '<option value="">لا توجد وحدات — أضف وحدات أولاً</option>';
-        return;
-      }
-      units.forEach(u=>{
-        const occ = u.tenant_name ? ` — ${u.tenant_name} (مشغولة)` : '';
-        unitSel.innerHTML += `<option value="${u.unit_num}" ${u.tenant_name?'disabled':''}>${u.unit_type} رقم ${u.unit_num}${occ}</option>`;
-      });
-    } catch(e) {
-      unitSel.innerHTML = '<option value="">خطأ في التحميل</option>';
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  async function saveTenant() {
-    const name    = document.getElementById('tenantName').value.trim();
-    const phone   = document.getElementById('tenantPhone').value.trim();
-    const propId  = document.getElementById('tenantProp').value;
-    const unitNum = document.getElementById('tenantUnit').value;
-    const count   = parseInt(document.getElementById('tenantCount').value||1);
-    const rent    = parseInt(document.getElementById('tenantRent').value||0);
-
-    if(!name)   { showToast('⚠️ أدخل اسم المستأجر', 'error'); return; }
-    if(!phone)  { showToast('⚠️ أدخل رقم الهاتف', 'error'); return; }
-    if(!propId) { showToast('⚠️ اختر العقار', 'error'); return; }
-    if(!unitNum){ showToast('⚠️ اختر الوحدة', 'error'); return; }
-    if(!rent)   { showToast('⚠️ أدخل مبلغ الإيجار', 'error'); return; }
-
-    let periodLabel = '';
-    if(currentTenantPeriod==='يوم') periodLabel = count+(count===1?' يوم':' أيام');
-    if(currentTenantPeriod==='شهر') periodLabel = count+(count===1?' شهر':' أشهر');
-    if(currentTenantPeriod==='سنة') periodLabel = count+(count===1?' سنة':' سنوات');
-    const prop = props.find(p=>p.id===propId);
-
-    setLoading('saveTenantBtn', true, 'جاري الحفظ...');
-    try {
-      const result = await api('POST', '/api/tenants', {
-        name, phone,
-        property_id: propId,
-        unit_num: parseInt(unitNum),
-        rent, period: currentTenantPeriod,
-        period_count: count, period_label: periodLabel
-      });
-      if(!result || result.error) throw new Error(result?.error || 'فشل الحفظ');
-      ['tenantName','tenantPhone','tenantRent','tenantCount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-      showSuccess('تم إضافة المستأجر! 🧑‍💼', `${name}\n🏗️ ${prop?.name} · 🚪 وحدة ${unitNum}\n📋 ${periodLabel} · 💰 ${fmt(rent)} ريال`);
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    } finally {
-      setLoading('saveTenantBtn', false, 'إضافة المستأجر 🧑‍💼');
-    }
-  }
-
-  // ===== PAID =====
-  async function loadPaidList() {
-    const list = document.getElementById('paidList');
-    list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      tenants = await api('GET', '/api/tenants');
-      if(!tenants.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">لا يوجد مستأجرون بعد</div></div>';return;}
-      const icon = t => t.period==='يوم'?'☀️':t.period==='شهر'?'📅':'📆';
-      list.innerHTML = tenants.map(t=>{
-        const badge = t.paid ? '<span class="list-item-badge badge-green">دفع ✅</span>' : '<span class="list-item-badge badge-red">لم يدفع ❌</span>';
-        return `<div class="list-item" onclick="markPaid('${t.id}','${escHtml(t.name)}',${t.rent},'${t.period_label||''}')">
-          <div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div>
-          <div class="list-item-info">
-            <div class="list-item-name">${t.name}</div>
-            <div class="list-item-sub">${t.properties?.name||''} · وحدة ${t.unit_num}<br>${icon(t)} ${t.period_label||''} · ${fmt(t.rent)} ريال</div>
-          </div>${badge}
-        </div>`;
-      }).join('');
-    } catch(e) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  async function markPaid(id, name, rent, periodLabel) {
-    const t = tenants.find(x=>x.id===id);
-    if(t?.paid){ showToast('✅ تم تسجيل الدفعة مسبقاً', 'success'); return; }
-    try {
-      await api('POST', `/api/tenants/${id}/pay`);
-      document.getElementById('paidSuccessSub').textContent = `${name}\n${periodLabel} · ${fmt(rent)} ريال\n\nهل تريد تسجيل مصروف مرتبط؟`;
-      goTo('paidSuccess');
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  // ===== EXPENSES =====
-  async function renderExpenseForm() {
-    try {
-      props = await api('GET', '/api/properties');
-      const sel = document.getElementById('expProp');
-      sel.innerHTML = '<option value="">— غير مرتبط —</option>';
-      props.forEach(p=>{ sel.innerHTML += `<option value="${p.id}">${p.name}</option>`; });
-      document.getElementById('expUnit').innerHTML = '<option value="">— غير مرتبط —</option>';
-      currentExpCat = 'صيانة';
-      document.querySelectorAll('.cat-btn').forEach((btn,i)=>{ btn.className='cat-btn'+(i===0?' selected':''); });
-      setLoading('saveExpBtn', false, 'تسجيل المصروف 📤');
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  async function updateExpUnitSelect() {
-    const propId = document.getElementById('expProp').value;
-    const unitSel = document.getElementById('expUnit');
-    unitSel.innerHTML = '<option value="">— غير مرتبط —</option>';
-    if(!propId) return;
-    try {
-      const units = await api('GET', `/api/units?property_id=${propId}`);
-      units.forEach(u=>{ unitSel.innerHTML += `<option value="${u.unit_num}">${u.unit_type} رقم ${u.unit_num}</option>`; });
-    } catch(e) {}
-  }
-
-  function selectExpCat(el,cat){ currentExpCat=cat; document.querySelectorAll('.cat-btn').forEach(b=>b.className='cat-btn'); el.className='cat-btn selected'; }
-
-  async function saveExpense() {
-    const desc   = document.getElementById('expDesc').value.trim();
-    const amount = parseInt(document.getElementById('expAmount').value||0);
-    if(!desc)  { showToast('⚠️ أدخل وصف المصروف', 'error'); return; }
-    if(!amount){ showToast('⚠️ أدخل مبلغ المصروف', 'error'); return; }
-
-    const propId = document.getElementById('expProp').value;
-    const unit   = document.getElementById('expUnit').value;
-
-    setLoading('saveExpBtn', true, 'جاري الحفظ...');
-    try {
-      const result = await api('POST', '/api/expenses', {
-        category: currentExpCat, description: desc, amount,
-        property_id: propId||null,
-        unit_num: unit ? parseInt(unit) : null
-      });
-      if(!result || result.error) throw new Error(result?.error || 'فشل الحفظ');
-      document.getElementById('expDesc').value = '';
-      document.getElementById('expAmount').value = '';
-      showSuccess('تم تسجيل المصروف! 📤', `${currentExpCat}: ${desc}\n💸 ${fmt(amount)} ريال`);
-    } catch(e) {
-      showToast('❌ ' + e.message, 'error');
-    } finally {
-      setLoading('saveExpBtn', false, 'تسجيل المصروف 📤');
-    }
-  }
-
-  async function loadExpensesList() {
-    const list = document.getElementById('expensesList');
-    list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      expenses = await api('GET', '/api/expenses');
-      if(!expenses.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">📤</div><div class="empty-text">لا توجد مصروفات</div></div>';return;}
-      const total = expenses.reduce((s,e)=>s+(e.amount||0),0);
-      list.innerHTML = `
-        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-size:12px;color:var(--muted);">إجمالي المصروفات</div>
-          <div style="font-size:20px;font-weight:800;color:var(--red);">${fmt(total)} ريال</div>
-        </div>
-        ${expenses.map(e=>`
-          <div class="list-item" style="cursor:default;">
-            <div class="list-item-icon red">${catIcons[e.category]||'📦'}</div>
-            <div class="list-item-info">
-              <div class="list-item-name">${e.description}</div>
-              <div class="list-item-sub">${e.category}${e.unit_num?' · وحدة '+e.unit_num:''}</div>
-            </div>
-            <span class="list-item-badge badge-red">${fmt(e.amount)} ريال</span>
-          </div>`).join('')}`;
-    } catch(e) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-      showToast('❌ ' + e.message, 'error');
-    }
-  }
-
-  // ===== REPORT =====
-  async function loadReport() {
-    const content = document.getElementById('reportContent');
-    content.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      const [stats, allTenants, allExpenses] = await Promise.all([
-        api('GET', '/api/stats'),
-        api('GET', '/api/tenants'),
-        api('GET', '/api/expenses')
-      ]);
-      const income = allTenants.reduce((s,t)=>s+(t.rent||0),0);
-      content.innerHTML = `
-        <div class="report-summary">
-          <div class="report-card"><div class="report-label">📥 إجمالي الواردات</div><div class="report-value teal">${fmt(income)}</div></div>
-          <div class="report-card"><div class="report-label">✅ المحصّل</div><div class="report-value green">${fmt(stats.income)}</div></div>
-          <div class="report-card"><div class="report-label">📤 إجمالي المصروفات</div><div class="report-value red">${fmt(stats.expenses)}</div></div>
-          <div class="report-card"><div class="report-label">💰 صافي الربح</div><div class="report-value ${(stats.net||0)>=0?'gold':'red'}">${fmt(stats.net)}</div></div>
-        </div>
-        <div class="section-divider">🧑‍💼 المستأجرون</div>
-        <div style="padding:0 16px 20px;">
-          ${allTenants.map(t=>`
-            <div class="list-item" style="cursor:default;">
-              <div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div>
-              <div class="list-item-info">
-                <div class="list-item-name">${t.name}</div>
-                <div class="list-item-sub">${t.properties?.name||''} · وحدة ${t.unit_num} · ${t.period_label||''} · ${fmt(t.rent)} ريال</div>
-              </div>
-              <span class="list-item-badge ${t.paid?'badge-green':'badge-red'}">${t.paid?'دفع ✅':'لم يدفع ❌'}</span>
-            </div>`).join('')}
-        </div>`;
-    } catch(e) {
-      content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-    }
-  }
-
-  async function loadPropReports() {
-    const content = document.getElementById('propReportsContent');
-    content.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      const [allProps, allTenants, allExpenses, allUnits] = await Promise.all([
-        api('GET', '/api/properties'),
-        api('GET', '/api/tenants'),
-        api('GET', '/api/expenses'),
-        api('GET', '/api/units')
-      ]);
-      if(!allProps.length){content.innerHTML='<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات</div></div>';return;}
-      content.innerHTML = allProps.map(prop=>{
-        const isInv = prop.type==='مستثمر';
-        const pTenants  = allTenants.filter(t=>t.property_id===prop.id);
-        const pExpenses = allExpenses.filter(e=>e.property_id===prop.id);
-        const pUnits    = allUnits.filter(u=>u.property_id===prop.id);
-        const pIncome   = pTenants.filter(t=>t.paid).reduce((s,t)=>s+(t.rent||0),0);
-        const pTotal    = pTenants.reduce((s,t)=>s+(t.rent||0),0);
-        const invExp    = isInv ? (prop.investor_rent||0) : 0;
-        const manExp    = pExpenses.reduce((s,e)=>s+(e.amount||0),0);
-        const pExp      = invExp + manExp;
-        const pNet      = pIncome - pExp;
-        const unitsHTML = pUnits.map(u=>{
-          const uTenant = pTenants.find(t=>t.unit_num===u.unit_num);
-          const uIncome = uTenant?.paid ? (uTenant.rent||0) : 0;
-          const uRent   = uTenant?.rent || 0;
-          const uExp    = pExpenses.filter(e=>e.unit_num===u.unit_num).reduce((s,e)=>s+(e.amount||0),0);
-          const uNet    = uIncome - uExp;
-          return `<div class="unit-row">
-            <div style="font-weight:700;font-size:13px;margin-bottom:6px;">${u.unit_type} رقم ${u.unit_num} · ${uTenant?uTenant.name:'فارغة'} ${uTenant?(uTenant.paid?'✅':'❌'):''}</div>
-            <div class="unit-fin-grid">
-              <div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--teal)">${fmt(uRent)}</div><div class="unit-fin-lbl">📥 الإيجار</div></div>
-              <div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--red)">${fmt(uExp)}</div><div class="unit-fin-lbl">📤 المصاريف</div></div>
-              <div class="unit-fin-cell"><div class="unit-fin-val" style="color:${uNet>=0?'var(--gold)':'var(--red)'}">${fmt(uNet)}</div><div class="unit-fin-lbl">💰 الصافي</div></div>
-            </div>
-          </div>`;
-        }).join('');
-        return `<div class="prop-report-card">
-          <div class="prop-report-header">
-            <div>
-              <div style="font-size:15px;font-weight:700;color:#f1f5f9;">${isInv?'💼':'🏠'} ${prop.name}</div>
-              <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;">📍 ${prop.location}${isInv&&prop.contract_desc?' · عقد: '+prop.contract_desc:''}</div>
-            </div>
-            <span style="background:${isInv?'rgba(245,158,11,.2)':'rgba(59,130,246,.2)'};color:${isInv?'var(--gold)':'var(--accent)'};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">${prop.type}</span>
-          </div>
-          <div class="prop-report-body">
-            <div class="prop-financial-row">
-              <div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--teal)">${fmt(pTotal)}</div><div class="prop-fin-label">📥 الإيجارات</div></div>
-              <div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--red)">${fmt(pExp)}</div><div class="prop-fin-label">📤 المصاريف</div></div>
-              <div class="prop-fin-item"><div class="prop-fin-val" style="color:${pNet>=0?'var(--gold)':'var(--red)'}">${fmt(pNet)}</div><div class="prop-fin-label">💰 الصافي</div></div>
-            </div>
-            ${isInv?`<div style="background:rgba(245,158,11,.08);border-radius:8px;padding:8px;font-size:12px;color:var(--muted);margin-bottom:10px;">💸 إيجار المالك: <strong style="color:var(--gold)">${fmt(prop.investor_rent)} ريال</strong></div>`:''}
-            ${pUnits.length?`<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;">🚪 تفصيل الوحدات</div>${unitsHTML}`:''}
-          </div>
-        </div>`;
-      }).join('');
-    } catch(e) {
-      content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-    }
-  }
-
-  async function loadReminders() {
-    const list = document.getElementById('reminderList');
-    list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      const allTenants = await api('GET', '/api/tenants');
-      const unpaid = allTenants.filter(t=>!t.paid);
-      if(!unpaid.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-text">جميع المستأجرين دفعوا!</div></div>';return;}
-      list.innerHTML = unpaid.map(t=>`
-        <div class="list-item" style="cursor:default">
-          <div class="list-item-icon red">🔔</div>
-          <div class="list-item-info">
-            <div class="list-item-name">${t.name}</div>
-            <div class="list-item-sub">📱 ${t.phone} · ${t.properties?.name||''} · وحدة ${t.unit_num}<br>${t.period_label||''} · ${fmt(t.rent)} ريال</div>
-          </div>
-          <span class="list-item-badge badge-red">متأخر</span>
-        </div>`).join('');
-    } catch(e) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-    }
-  }
-
-  async function loadTenantList() {
-    const list = document.getElementById('tenantList');
-    list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-    try {
-      const allTenants = await api('GET', '/api/tenants');
-      if(!allTenants.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">لا يوجد مستأجرون</div></div>';return;}
-      list.innerHTML = allTenants.map(t=>`
-        <div class="list-item" style="cursor:default">
-          <div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div>
-          <div class="list-item-info">
-            <div class="list-item-name">${t.name}</div>
-            <div class="list-item-sub">📱 ${t.phone} · ${t.properties?.name||''} · وحدة ${t.unit_num}<br>${t.period_label||''} · ${fmt(t.rent)} ريال</div>
-          </div>
-          <span class="list-item-badge ${t.paid?'badge-green':'badge-red'}">${t.paid?'✅':'❌'}</span>
-        </div>`).join('');
-    } catch(e) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
-    }
-  }
-
-  function showSuccess(title,sub){
-    document.getElementById('successTitle').textContent=title;
-    document.getElementById('successSub').textContent=sub;
-    goTo('success');
-  }
-
-  function escHtml(s){ return String(s).replace(/'/g,"\\'"); }
-
-  async function exportPDF() {
-    showToast('🔜 ميزة PDF قريباً!', 'success');
-  }
-
-  // DATE & TIME
-  function updateDateTime(){
-    const n=new Date();
-    const d=document.getElementById('currentDate'),t=document.getElementById('currentTime'),h=document.getElementById('hijriDate');
-    if(d)d.textContent=n.toLocaleDateString('ar-SA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    if(t)t.textContent='🕐 '+n.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
-    if(h)h.textContent='🌙 '+n.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'});
-  }
-  updateDateTime(); setInterval(updateDateTime,1000);
-  buildMonthsGrid();
-  setTimeout(()=>{ goTo('home'); }, 1500);
+updateDateTime();
+setInterval(updateDateTime, 1000);
+buildMonthsGrid();
+init(); // ← يبدأ بتسجيل الدخول أولاً
 </script>
 </body>
 </html>
