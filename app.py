@@ -12,9 +12,18 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from functools import wraps
+from collections import defaultdict
+import threading
 
 app = Flask(__name__)
-CORS(app)
+
+# ✅ CORS مقيّد بـ GitHub Pages فقط
+ALLOWED_ORIGINS = [
+    "https://rllgn11-gif.github.io",
+    "https://web.telegram.org",
+    "https://k.tgfiles.com",      # Telegram WebApp CDN
+]
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=False)
 
 # ============================================================
 # 🔑 المفاتيح
@@ -28,6 +37,33 @@ RAILWAY_URL          = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
 # ============================================================
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# ============================================================
+# 🚦 Rate Limiter — حماية من الـ Spam
+# ============================================================
+_rate_data  = defaultdict(list)   # ip → [timestamps]
+_rate_lock  = threading.Lock()
+
+def rate_limit(max_calls: int, period: int):
+    """
+    max_calls : أقصى عدد طلبات
+    period    : خلال كم ثانية
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+            key = f"{f.__name__}:{ip}"
+            now = time.time()
+            with _rate_lock:
+                calls = [t for t in _rate_data[key] if now - t < period]
+                if len(calls) >= max_calls:
+                    return jsonify({"error": "طلبات كثيرة جداً — انتظر قليلاً"}), 429
+                calls.append(now)
+                _rate_data[key] = calls
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
 
 # ============================================================
 # 🛠️ Supabase Helper
@@ -122,13 +158,15 @@ def require_auth(f):
     return decorated
 
 # ============================================================
-# 🌐 CORS
+# 🌐 CORS — مقيّد بالمصادر المسموحة فقط
 # ============================================================
 @app.after_request
 def add_cors(response):
-    response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    origin = request.headers.get("Origin", "")
+    if any(origin.startswith(o) for o in ALLOWED_ORIGINS):
+        response.headers["Access-Control-Allow-Origin"]  = origin
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response
 
 @app.route("/<path:path>", methods=["OPTIONS"])
@@ -139,14 +177,19 @@ def options(path):
 # 🔐 Auth
 # ============================================================
 @app.route("/auth", methods=["POST"])
+@rate_limit(max_calls=10, period=60)   # ✅ 10 محاولات كل دقيقة فقط
 def auth():
     data      = request.json or {}
-    init_data = data.get("initData", "")
-    if not init_data:
-        return jsonify({"error": "initData مطلوب"}), 400
+    init_data = data.get("initData", "").strip()
+
+    # ✅ رفض الطلبات الفارغة أو dev_mode بشكل صريح
+    if not init_data or init_data == "dev_mode":
+        return jsonify({"error": "يجب فتح التطبيق من داخل تيليجرام فقط"}), 403
+
     user = verify_telegram_init_data(init_data)
     if not user:
         return jsonify({"error": "فشل التحقق من تيليجرام"}), 401
+
     token = create_jwt(user["id"], user.get("first_name", ""))
     return jsonify({
         "token":      token,
@@ -164,6 +207,7 @@ def health():
 # ============================================================
 @app.route("/api/properties", methods=["GET"])
 @require_auth
+@rate_limit(max_calls=60, period=60)
 def get_properties(user):
     try:
         return jsonify(sb_select("properties", {"user_id": f"eq.{user['user_id']}"}))
@@ -172,6 +216,7 @@ def get_properties(user):
 
 @app.route("/api/properties", methods=["POST"])
 @require_auth
+@rate_limit(max_calls=20, period=60)
 def add_property(user):
     try:
         d = request.json
@@ -264,6 +309,7 @@ def get_tenants(user):
 
 @app.route("/api/tenants", methods=["POST"])
 @require_auth
+@rate_limit(max_calls=20, period=60)
 def add_tenant(user):
     try:
         d = request.json
@@ -382,6 +428,7 @@ def get_expenses(user):
 
 @app.route("/api/expenses", methods=["POST"])
 @require_auth
+@rate_limit(max_calls=20, period=60)
 def add_expense(user):
     try:
         d = request.json
