@@ -502,8 +502,23 @@ async function api(method, path, body) {
 async function login() {
   const tg = window.Telegram.WebApp;
   const initData = tg.initData;
-  if (!initData) { jwtToken = 'dev_mode'; return; }
-  const res  = await fetch(`${API}/auth`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({initData}) });
+
+  // ✅ رفض الوصول خارج تيليجرام بشكل صريح
+  if (!initData) {
+    document.getElementById('splash').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;gap:16px;">
+        <div style="font-size:56px">🔒</div>
+        <div style="font-size:20px;font-weight:800;color:#f1f5f9;">يجب فتح التطبيق من تيليجرام</div>
+        <div style="font-size:14px;color:#64748b;line-height:1.8;">هذا التطبيق يعمل فقط داخل بوت تيليجرام<br>ابحث عن البوت وافتح التطبيق منه</div>
+      </div>`;
+    throw new Error('ليس داخل تيليجرام');
+  }
+
+  const res  = await fetch(`${API}/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData })
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'فشل التحقق');
   jwtToken = data.token;
