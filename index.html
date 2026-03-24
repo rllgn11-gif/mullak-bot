@@ -503,7 +503,6 @@ async function login() {
   const tg = window.Telegram.WebApp;
   const initData = tg.initData;
 
-  // ✅ رفض الوصول خارج تيليجرام بشكل صريح
   if (!initData) {
     document.getElementById('splash').innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;gap:16px;">
@@ -521,8 +520,16 @@ async function login() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'فشل التحقق');
+
   jwtToken = data.token;
   document.getElementById('userName').textContent = data.first_name || 'مُلّاك';
+
+  // ✅ حفظ session_id وبدء التتبع
+  if (data.session_id) {
+    sessionId        = data.session_id;
+    sessionStartTime = Date.now();
+    startHeartbeat();
+  }
 }
 
 async function init() {
@@ -534,7 +541,40 @@ async function init() {
 }
 
 // ============================================================
-// Nav
+// 📊 Session Tracking
+// ============================================================
+let sessionId        = null;
+let sessionStartTime = Date.now();
+let heartbeatTimer   = null;
+
+function getDuration() {
+  return Math.floor((Date.now() - sessionStartTime) / 1000);
+}
+
+function sendSessionEnd() {
+  if (!sessionId) return;
+  const payload = JSON.stringify({ session_id: sessionId, duration: getDuration() });
+  navigator.sendBeacon(`${API}/api/session/end`, new Blob([payload], {type:'application/json'}));
+}
+
+function startHeartbeat() {
+  // كل 30 ثانية يحدّث المدة في الـ Backend
+  heartbeatTimer = setInterval(async () => {
+    if (!sessionId || !jwtToken) return;
+    try {
+      await fetch(`${API}/api/session/ping`, {
+        method:  'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${jwtToken}` },
+        body:    JSON.stringify({ session_id: sessionId, duration: getDuration() })
+      });
+    } catch(e) { /* تجاهل أخطاء الشبكة */ }
+  }, 30000);
+}
+
+// إرسال مدة الجلسة عند الإغلاق
+window.addEventListener('beforeunload', sendSessionEnd);
+
+// ============================================================
 // ============================================================
 function goTo(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
