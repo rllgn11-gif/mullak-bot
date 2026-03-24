@@ -5,6 +5,7 @@ import json
 import time
 import jwt
 import requests
+from datetime import datetime
 from urllib.parse import unquote
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -163,7 +164,8 @@ def require_auth(f):
 @app.after_request
 def add_cors(response):
     origin = request.headers.get("Origin", "")
-    if any(origin.startswith(o) for o in ALLOWED_ORIGINS):
+    # ✅ مطابقة تامة — لا startswith
+    if origin in ALLOWED_ORIGINS:
         response.headers["Access-Control-Allow-Origin"]  = origin
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
@@ -177,12 +179,11 @@ def options(path):
 # 🔐 Auth
 # ============================================================
 @app.route("/auth", methods=["POST"])
-@rate_limit(max_calls=10, period=60)   # ✅ 10 محاولات كل دقيقة فقط
+@rate_limit(max_calls=10, period=60)
 def auth():
     data      = request.json or {}
     init_data = data.get("initData", "").strip()
 
-    # ✅ رفض الطلبات الفارغة أو dev_mode بشكل صريح
     if not init_data or init_data == "dev_mode":
         return jsonify({"error": "يجب فتح التطبيق من داخل تيليجرام فقط"}), 403
 
@@ -190,17 +191,79 @@ def auth():
     if not user:
         return jsonify({"error": "فشل التحقق من تيليجرام"}), 401
 
-    token = create_jwt(user["id"], user.get("first_name", ""))
+    user_id   = str(user["id"])
+    first_name = user.get("first_name", "")
+
+    # ✅ تسجيل جلسة جديدة
+    try:
+        session = sb_insert("sessions", {
+            "user_id":    user_id,
+            "started_at": datetime.utcnow().isoformat()
+        })
+        session_id = session.get("id", "")
+    except Exception:
+        session_id = ""
+
+    token = create_jwt(user_id, first_name)
     return jsonify({
         "token":      token,
-        "user_id":    str(user["id"]),
-        "first_name": user.get("first_name", ""),
-        "username":   user.get("username", "")
+        "user_id":    user_id,
+        "first_name": first_name,
+        "username":   user.get("username", ""),
+        "session_id": session_id   # ✅ يرجع للواجهة
     })
 
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "app": "مُلّاك 🏠"})
+
+# ============================================================
+# 📊 Session Tracking
+# ============================================================
+@app.route("/api/session/end", methods=["POST"])
+def end_session():
+    """
+    لا يحتاج JWT — يُرسَل عند إغلاق المتصفح عبر sendBeacon
+    البيانات: session_id + duration فقط (لا بيانات حساسة)
+    """
+    try:
+        # sendBeacon يرسل كـ text/plain أحياناً
+        raw = request.get_data(as_text=True)
+        try:
+            d = json.loads(raw) if raw else {}
+        except Exception:
+            d = request.json or {}
+
+        session_id = d.get("session_id", "")
+        duration   = max(0, min(int(d.get("duration", 0)), 86400))  # حد أقصى 24 ساعة
+
+        if session_id:
+            sb_update("sessions",
+                {"id": f"eq.{session_id}"},
+                {
+                    "ended_at":        datetime.utcnow().isoformat(),
+                    "duration_seconds": duration
+                })
+        return "", 204
+    except Exception:
+        return "", 204   # دائماً 204 — لا نكشف الأخطاء
+
+@app.route("/api/session/ping", methods=["POST"])
+@require_auth
+@rate_limit(max_calls=120, period=60)
+def session_ping(user):
+    """Heartbeat كل 30 ثانية — يحدّث مدة الجلسة"""
+    try:
+        d          = request.json or {}
+        session_id = d.get("session_id", "")
+        duration   = max(0, int(d.get("duration", 0)))
+        if session_id:
+            sb_update("sessions",
+                {"id": f"eq.{session_id}"},
+                {"duration_seconds": duration})
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ============================================================
 # 🏗️ العقارات
@@ -755,11 +818,90 @@ def start(msg):
         reply_markup=app_keyboard()
     )
 
-@bot.message_handler(commands=["id"])
-def get_id(msg):
-    bot.reply_to(msg, f"🆔 ID: `{msg.from_user.id}`", parse_mode="Markdown")
+@bot.message_handler(commands=["stats"])
+def send_stats(msg):
+    admin_id = os.environ.get("ADMIN_ID", "")
+    if str(msg.from_user.id) != str(admin_id):
+        return   # صمت تام — كأن الأمر غير موجود
 
-@bot.message_handler(func=lambda m: True)
+    try:
+        sessions = sb_select("sessions")
+        props    = sb_select("properties")
+        tenants  = sb_select("tenants")
+
+        if not sessions:
+            bot.send_message(msg.chat.id, "📊 لا توجد بيانات بعد — انتظر دخول مستخدمين")
+            return
+
+        # ====== الحسابات ======
+        all_users      = set(s["user_id"] for s in sessions)
+        total_users    = len(all_users)
+        total_sessions = len(sessions)
+
+        # الراجعون = دخلوا أكثر من مرة
+        returning = len([
+            u for u in all_users
+            if sum(1 for s in sessions if s["user_id"] == u) > 1
+        ])
+        pct_ret = int((returning / total_users * 100)) if total_users else 0
+
+        # مدد الجلسات المكتملة فقط
+        completed = [s for s in sessions if s.get("duration_seconds", 0) > 0]
+        avg_sec   = int(sum(s["duration_seconds"] for s in completed) / len(completed)) if completed else 0
+        avg_min   = avg_sec // 60
+        avg_rem   = avg_sec % 60
+
+        # التوزيع
+        lt1 = len([s for s in completed if s["duration_seconds"] < 60])
+        lt2 = len([s for s in completed if 60  <= s["duration_seconds"] < 120])
+        lt3 = len([s for s in completed if 120 <= s["duration_seconds"] < 180])
+        gt3 = len([s for s in completed if s["duration_seconds"] >= 180])
+
+        # نسب مئوية للتوزيع
+        tot_c = len(completed) or 1
+        def pct(n): return int(n / tot_c * 100)
+
+        # إحصائيات التطبيق
+        total_props   = len(props)
+        total_tenants = len(tenants)
+        total_paid    = len([t for t in tenants if t.get("paid")])
+        app_users     = len(set(p["user_id"] for p in props)) if props else 0
+
+        # تقييم ذكي
+        if pct(gt3) >= 30:
+            rating = "🔥 التطبيق ممتاز — المستخدمون يتفاعلون بعمق"
+        elif pct(lt1) >= 60:
+            rating = "⚠️ أغلب المستخدمين يخرجون سريعاً — راجع تجربة المستخدم"
+        else:
+            rating = "✅ التطبيق يعمل بشكل جيد"
+
+        text = (
+            f"📊 *إحصائيات مُلّاك*\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"👥 المستخدمون الكلي: `{total_users}`\n"
+            f"📱 إجمالي الجلسات:  `{total_sessions}`\n"
+            f"🔁 الراجعون:        `{returning}` ({pct_ret}%)\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"⏱️ متوسط الاستخدام: `{avg_min}:{avg_rem:02d}` دقيقة\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"📊 *توزيع مدة الاستخدام:*\n"
+            f"• أقل من دقيقة:   `{lt1}` ({pct(lt1)}%)\n"
+            f"• 1–2 دقيقة:       `{lt2}` ({pct(lt2)}%)\n"
+            f"• 2–3 دقائق:       `{lt3}` ({pct(lt3)}%)\n"
+            f"• أكثر من 3 دقائق: `{gt3}` ({pct(gt3)}%)\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"🏗️ مستخدمو التطبيق: `{app_users}`\n"
+            f"🏢 العقارات:        `{total_props}`\n"
+            f"🧑‍💼 المستأجرون:     `{total_tenants}` (مدفوع: `{total_paid}`)\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"📌 *التقييم:* {rating}"
+        )
+        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+
+    except Exception as e:
+        bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: not (m.text or "").startswith("/"))
 def default(msg):
     bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
 
