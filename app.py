@@ -5,7 +5,7 @@ import json
 import time
 import jwt
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -18,9 +18,7 @@ import threading
 
 app = Flask(__name__)
 
-# ============================================================
-# ✅ CORS المسموح
-# ============================================================
+# ✅ CORS مقيّد
 ALLOWED_ORIGINS = [
     "https://rllgn11-gif.github.io",
     "https://web.telegram.org",
@@ -29,24 +27,24 @@ ALLOWED_ORIGINS = [
 CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=False)
 
 # ============================================================
-# 🔑 المتغيرات
+# 🔑 المفاتيح
 # ============================================================
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
-JWT_SECRET = os.environ.get("JWT_SECRET", "CHANGE_THIS_SECRET").strip()
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+BOT_TOKEN            = os.environ.get("BOT_TOKEN", "").strip()
+JWT_SECRET           = os.environ.get("JWT_SECRET", "CHANGE_THIS_SECRET").strip()
+SUPABASE_URL         = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
-MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/").strip()
-RAILWAY_URL = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
+MINI_APP_URL         = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/").strip()
+RAILWAY_URL          = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+ADMIN_ID             = os.environ.get("ADMIN_ID", "").strip()
+# ============================================================
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # ============================================================
-# 🚦 Rate Limit
+# 🚦 Rate Limiter
 # ============================================================
 _rate_data = defaultdict(list)
 _rate_lock = threading.Lock()
-
 
 def rate_limit(max_calls: int, period: int):
     def decorator(f):
@@ -67,18 +65,16 @@ def rate_limit(max_calls: int, period: int):
         return wrapped
     return decorator
 
-
 # ============================================================
-# 🛠️ Supabase Helpers
+# 🛠️ Supabase Helper
 # ============================================================
 def sb_headers():
     return {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation",
+        "Prefer": "return=representation"
     }
-
 
 def sb_select(table, filters=None, select="*", order=None):
     params = {"select": select}
@@ -90,13 +86,11 @@ def sb_select(table, filters=None, select="*", order=None):
     res.raise_for_status()
     return res.json()
 
-
 def sb_insert(table, data):
     res = requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=sb_headers(), json=data, timeout=20)
     res.raise_for_status()
     result = res.json()
     return result[0] if isinstance(result, list) and result else result
-
 
 def sb_update(table, filters, data):
     res = requests.patch(f"{SUPABASE_URL}/rest/v1/{table}", headers=sb_headers(), params=filters, json=data, timeout=20)
@@ -104,15 +98,13 @@ def sb_update(table, filters, data):
     result = res.json()
     return result[0] if isinstance(result, list) and result else {"ok": True}
 
-
 def sb_delete(table, filters):
     res = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}", headers=sb_headers(), params=filters, timeout=20)
     res.raise_for_status()
     return {"ok": True}
 
-
 # ============================================================
-# 🔐 Telegram Verify
+# 🔐 تحقق Telegram
 # ============================================================
 def verify_telegram_init_data(init_data: str):
     try:
@@ -141,26 +133,22 @@ def verify_telegram_init_data(init_data: str):
         print(f"Telegram verify error: {e}")
         return None
 
-
 # ============================================================
 # 🎫 JWT
 # ============================================================
 def create_jwt(user_id, first_name):
-    payload = {
+    return jwt.encode({
         "user_id": str(user_id),
         "first_name": first_name,
         "iat": int(time.time()),
-        "exp": int(time.time()) + 60 * 60 * 24 * 7,
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-
+        "exp": int(time.time()) + 60 * 60 * 24 * 7
+    }, JWT_SECRET, algorithm="HS256")
 
 def verify_jwt_token(token):
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except Exception:
         return None
-
 
 def require_auth(f):
     @wraps(f)
@@ -176,7 +164,6 @@ def require_auth(f):
         return f(user, *args, **kwargs)
     return decorated
 
-
 # ============================================================
 # 🌐 CORS Headers
 # ============================================================
@@ -189,11 +176,9 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response
 
-
 @app.route("/<path:path>", methods=["OPTIONS"])
 def options(path):
     return "", 200
-
 
 # ============================================================
 # ❤️ Health
@@ -201,7 +186,6 @@ def options(path):
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "app": "مُلّاك 🏠"})
-
 
 # ============================================================
 # 🔐 Auth
@@ -226,12 +210,13 @@ def auth():
     try:
         session = sb_insert("sessions", {
             "user_id": user_id,
-            "started_at": datetime.utcnow().isoformat(),
-            "duration_seconds": 0,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_seconds": 0
         })
         session_id = session.get("id", "")
     except Exception as e:
-        print(f"Session start insert failed: {e}")
+        print("SESSION INSERT ERROR:", e)
+        session_id = ""
 
     token = create_jwt(user_id, first_name)
     return jsonify({
@@ -239,9 +224,8 @@ def auth():
         "user_id": user_id,
         "first_name": first_name,
         "username": user.get("username", ""),
-        "session_id": session_id,
+        "session_id": session_id
     })
-
 
 # ============================================================
 # 📊 Session Tracking
@@ -257,22 +241,22 @@ def end_session():
 
         session_id = d.get("session_id", "")
         duration = max(0, min(int(d.get("duration", 0)), 86400))
+        last_screen = (d.get("last_screen", "") or "")[:100]
 
         if session_id:
-            sb_update(
-                "sessions",
-                {"id": f"eq.{session_id}"},
-                {
-                    "ended_at": datetime.utcnow().isoformat(),
-                    "duration_seconds": duration,
-                },
-            )
+            payload = {
+                "ended_at": datetime.now(timezone.utc).isoformat(),
+                "duration_seconds": duration
+            }
+            if last_screen:
+                payload["last_screen"] = last_screen
+
+            sb_update("sessions", {"id": f"eq.{session_id}"}, payload)
 
         return "", 204
     except Exception as e:
-        print(f"end_session error: {e}")
+        print("SESSION END ERROR:", e)
         return "", 204
-
 
 @app.route("/api/session/ping", methods=["POST"])
 @require_auth
@@ -282,21 +266,14 @@ def session_ping(user):
         d = request.json or {}
         session_id = d.get("session_id", "")
         duration = max(0, int(d.get("duration", 0)))
-
         if session_id:
-            sb_update(
-                "sessions",
-                {"id": f"eq.{session_id}"},
-                {"duration_seconds": duration},
-            )
-
+            sb_update("sessions", {"id": f"eq.{session_id}"}, {"duration_seconds": duration})
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 🏗️ Properties
+# 🏗️ العقارات
 # ============================================================
 @app.route("/api/properties", methods=["GET"])
 @require_auth
@@ -306,7 +283,6 @@ def get_properties(user):
         return jsonify(sb_select("properties", {"user_id": f"eq.{user['user_id']}"}))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/properties", methods=["POST"])
 @require_auth
@@ -324,12 +300,11 @@ def add_property(user):
             "location": d.get("location", "").strip(),
             "type": d.get("type", "مالك"),
             "investor_rent": d.get("investor_rent", 0),
-            "contract_desc": d.get("contract_desc", "").strip(),
+            "contract_desc": d.get("contract_desc", "").strip()
         })
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/properties/<prop_id>", methods=["PUT"])
 @require_auth
@@ -341,12 +316,11 @@ def edit_property(user, prop_id):
         result = sb_update(
             "properties",
             {"id": f"eq.{prop_id}", "user_id": f"eq.{user['user_id']}"},
-            updates,
+            updates
         )
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/properties/<prop_id>", methods=["DELETE"])
 @require_auth
@@ -357,9 +331,8 @@ def delete_property(user, prop_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 🚪 Units
+# 🚪 الوحدات
 # ============================================================
 @app.route("/api/units", methods=["GET"])
 @require_auth
@@ -373,7 +346,6 @@ def get_units(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/api/units", methods=["POST"])
 @require_auth
 def add_unit(user):
@@ -383,12 +355,11 @@ def add_unit(user):
             "user_id": str(user["user_id"]),
             "property_id": d.get("property_id"),
             "unit_num": d.get("unit_num"),
-            "unit_type": d.get("unit_type", "شقة"),
+            "unit_type": d.get("unit_type", "شقة")
         })
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/units/<unit_id>", methods=["DELETE"])
 @require_auth
@@ -399,9 +370,8 @@ def delete_unit(user, unit_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 🧑‍💼 Tenants
+# 🧑‍💼 المستأجرون
 # ============================================================
 @app.route("/api/tenants", methods=["GET"])
 @require_auth
@@ -414,7 +384,6 @@ def get_tenants(user):
         ))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/tenants", methods=["POST"])
 @require_auth
@@ -433,7 +402,7 @@ def add_tenant(user):
             "period": d.get("period", "شهر"),
             "period_count": d.get("period_count", 1),
             "period_label": d.get("period_label", ""),
-            "paid": False,
+            "paid": False
         }
 
         if d.get("start_date"):
@@ -449,15 +418,14 @@ def add_tenant(user):
                 {
                     "property_id": f"eq.{d['property_id']}",
                     "unit_num": f"eq.{d['unit_num']}",
-                    "user_id": f"eq.{user['user_id']}",
+                    "user_id": f"eq.{user['user_id']}"
                 },
-                {"tenant_name": d.get("name", "").strip()},
+                {"tenant_name": d.get("name", "").strip()}
             )
 
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/tenants/<tenant_id>", methods=["PUT"])
 @require_auth
@@ -470,14 +438,14 @@ def edit_tenant(user, tenant_id):
         result = sb_update(
             "tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"},
-            updates,
+            updates
         )
 
         if "name" in d:
             tenant_data = sb_select(
                 "tenants",
                 {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"},
-                select="property_id,unit_num",
+                select="property_id,unit_num"
             )
             if tenant_data:
                 t = tenant_data[0]
@@ -486,15 +454,14 @@ def edit_tenant(user, tenant_id):
                     {
                         "property_id": f"eq.{t['property_id']}",
                         "unit_num": f"eq.{t['unit_num']}",
-                        "user_id": f"eq.{user['user_id']}",
+                        "user_id": f"eq.{user['user_id']}"
                     },
-                    {"tenant_name": d["name"]},
+                    {"tenant_name": d["name"]}
                 )
 
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/tenants/<tenant_id>", methods=["DELETE"])
 @require_auth
@@ -503,7 +470,7 @@ def delete_tenant(user, tenant_id):
         tenants = sb_select(
             "tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"},
-            select="property_id,unit_num",
+            select="property_id,unit_num"
         )
 
         if tenants:
@@ -513,16 +480,15 @@ def delete_tenant(user, tenant_id):
                 {
                     "property_id": f"eq.{t['property_id']}",
                     "unit_num": f"eq.{t['unit_num']}",
-                    "user_id": f"eq.{user['user_id']}",
+                    "user_id": f"eq.{user['user_id']}"
                 },
-                {"tenant_name": None},
+                {"tenant_name": None}
             )
 
         sb_delete("tenants", {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"})
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/tenants/<tenant_id>/pay", methods=["POST"])
 @require_auth
@@ -531,12 +497,11 @@ def pay_tenant(user, tenant_id):
         result = sb_update(
             "tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"},
-            {"paid": True},
+            {"paid": True}
         )
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/tenants/reset", methods=["POST"])
 @require_auth
@@ -547,9 +512,8 @@ def reset_tenants(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 📤 Expenses
+# 📤 المصروفات
 # ============================================================
 @app.route("/api/expenses", methods=["GET"])
 @require_auth
@@ -563,7 +527,6 @@ def get_expenses(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/api/expenses", methods=["POST"])
 @require_auth
 @rate_limit(max_calls=20, period=60)
@@ -576,12 +539,11 @@ def add_expense(user):
             "description": d.get("description", "").strip(),
             "amount": d.get("amount", 0),
             "property_id": d.get("property_id") or None,
-            "unit_num": d.get("unit_num") or None,
+            "unit_num": d.get("unit_num") or None
         })
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/expenses/<exp_id>", methods=["DELETE"])
 @require_auth
@@ -592,9 +554,8 @@ def delete_expense(user, exp_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 📊 User Stats
+# 📊 إحصائيات المستخدم داخل التطبيق
 # ============================================================
 @app.route("/api/stats", methods=["GET"])
 @require_auth
@@ -616,14 +577,13 @@ def get_stats(user):
             "tenants": len(tenants),
             "income": income,
             "expenses": total,
-            "net": income - total,
+            "net": income - total
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 📄 Printable Report
+# 📄 تقرير PDF
 # ============================================================
 @app.route("/api/report/print", methods=["GET"])
 @require_auth
@@ -799,9 +759,8 @@ def print_report(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ============================================================
-# 🔔 Daily Reminders
+# 🔔 التذكيرات اليومية
 # ============================================================
 def send_daily_reminders():
     if not BOT_TOKEN or not SUPABASE_URL:
@@ -832,12 +791,10 @@ def send_daily_reminders():
 
             for t in unpaid[:10]:
                 prop = (t.get("properties") or {}).get("name", "")
-                lines.append(
-                    f"• *{t['name']}* — {prop} — وحدة {t.get('unit_num','')} — {int(t.get('rent',0)):,} ريال"
-                )
+                lines.append(f"• *{t['name']}* — {prop} — وحدة {t.get('unit_num','')} — {int(t.get('rent',0)):,} ريال")
 
             if len(unpaid) > 10:
-                lines.append(f"_... و {len(unpaid) - 10} آخرين_")
+                lines.append(f"_... و {len(unpaid)-10} آخرين_")
 
             msg = (
                 "🔔 *تذكير يومي — مُلّاك*\n\n"
@@ -861,9 +818,105 @@ def send_daily_reminders():
     except Exception as e:
         print(f"❌ خطأ في التذكيرات اليومية: {e}")
 
+# ============================================================
+# 📊 Analytics Helpers
+# ============================================================
+def _session_duration(row):
+    try:
+        return int(row.get("duration_seconds", 0) or 0)
+    except Exception:
+        return 0
+
+def _session_started_at(row):
+    raw = row.get("started_at")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _filter_sessions_since(sessions, since_dt):
+    out = []
+    for s in sessions:
+        started = _session_started_at(s)
+        if started and started >= since_dt:
+            out.append(s)
+    return out
+
+def _analytics_text(sessions, title="📊 إحصائيات مُلّاك"):
+    if not sessions:
+        return f"{title}\n━━━━━━━━━━━━━━━━━\n📊 لا توجد بيانات بعد"
+
+    all_users = set(s["user_id"] for s in sessions if s.get("user_id"))
+    total_users = len(all_users)
+    total_sessions = len(sessions)
+
+    returning = len([
+        u for u in all_users
+        if sum(1 for s in sessions if s.get("user_id") == u) > 1
+    ])
+    pct_ret = int((returning / total_users) * 100) if total_users else 0
+
+    completed = [s for s in sessions if _session_duration(s) > 0]
+
+    avg_sec = int(sum(_session_duration(s) for s in completed) / len(completed)) if completed else 0
+    avg_min = avg_sec // 60
+    avg_rem = avg_sec % 60
+
+    lt1 = len([s for s in completed if _session_duration(s) < 60])
+    lt2 = len([s for s in completed if 60 <= _session_duration(s) < 120])
+    lt3 = len([s for s in completed if 120 <= _session_duration(s) < 180])
+    gt3 = len([s for s in completed if _session_duration(s) >= 180])
+
+    total_completed = len(completed) or 1
+
+    def pct(n):
+        return int((n / total_completed) * 100)
+
+    if pct(gt3) >= 30:
+        rating = "🔥 ممتاز — المستخدمون يتفاعلون بعمق"
+    elif pct_ret >= 40:
+        rating = "✅ جيد جداً — هناك عودة قوية للتطبيق"
+    elif pct(lt1) >= 60:
+        rating = "⚠️ أغلب المستخدمين يخرجون بسرعة — يحتاج تحسين البداية"
+    else:
+        rating = "✅ جيد — الاستخدام مستقر"
+
+    return (
+        f"{title}\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"👥 المستخدمون الكلي: `{total_users}`\n"
+        f"📱 إجمالي الجلسات: `{total_sessions}`\n"
+        f"🔁 الراجعون: `{returning}` ({pct_ret}%)\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"⏱️ متوسط الاستخدام: `{avg_min}:{avg_rem:02d}` دقيقة\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"📊 *توزيع مدة الاستخدام:*\n"
+        f"• أقل من دقيقة: `{lt1}` ({pct(lt1)}%)\n"
+        f"• 1–2 دقيقة: `{lt2}` ({pct(lt2)}%)\n"
+        f"• 2–3 دقائق: `{lt3}` ({pct(lt3)}%)\n"
+        f"• أكثر من 3 دقائق: `{gt3}` ({pct(gt3)}%)\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"📌 *التقييم:* {rating}"
+    )
+
+def send_admin_daily_analytics():
+    if not ADMIN_ID:
+        return
+    try:
+        sessions = sb_select("sessions", order="started_at.desc")
+        now_utc = datetime.now(timezone.utc)
+        start_today = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+        today_sessions = _filter_sessions_since(sessions, start_today)
+
+        text = _analytics_text(today_sessions, "📅 *تقرير اليوم التلقائي*")
+        bot.send_message(int(ADMIN_ID), text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Admin analytics error: {e}")
 
 # ============================================================
-# 🤖 Telegram Bot
+# 🤖 تيليجرام بوت
 # ============================================================
 @app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
 def webhook():
@@ -871,7 +924,6 @@ def webhook():
         update = telebot.types.Update.de_json(request.data.decode("utf-8"))
         bot.process_new_updates([update])
     return "", 200
-
 
 @app.route("/set_webhook", methods=["GET"])
 def set_webhook():
@@ -883,7 +935,6 @@ def set_webhook():
     ok = bot.set_webhook(url=url, drop_pending_updates=True)
     return jsonify({"ok": ok, "webhook": url})
 
-
 def app_keyboard():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(
@@ -891,7 +942,6 @@ def app_keyboard():
         web_app=WebAppInfo(url=MINI_APP_URL)
     ))
     return markup
-
 
 @bot.message_handler(commands=["start"])
 def start(msg):
@@ -905,99 +955,60 @@ def start(msg):
         reply_markup=app_keyboard()
     )
 
-
 @bot.message_handler(commands=["stats"])
 def send_stats(msg):
     if str(msg.from_user.id) != str(ADMIN_ID):
         return
 
     try:
-        sessions = sb_select("sessions")
-        props = sb_select("properties")
-        tenants = sb_select("tenants")
-
-        if not sessions:
-            bot.send_message(msg.chat.id, "📊 لا توجد بيانات بعد — انتظر دخول مستخدمين")
-            return
-
-        all_users = set(s["user_id"] for s in sessions if s.get("user_id"))
-        total_users = len(all_users)
-        total_sessions = len(sessions)
-
-        returning = len([
-            u for u in all_users
-            if sum(1 for s in sessions if s.get("user_id") == u) > 1
-        ])
-        pct_ret = int((returning / total_users) * 100) if total_users else 0
-
-        completed = [s for s in sessions if int(s.get("duration_seconds", 0) or 0) > 0]
-        avg_sec = int(sum(int(s.get("duration_seconds", 0) or 0) for s in completed) / len(completed)) if completed else 0
-        avg_min = avg_sec // 60
-        avg_rem = avg_sec % 60
-
-        lt1 = len([s for s in completed if int(s.get("duration_seconds", 0) or 0) < 60])
-        lt2 = len([s for s in completed if 60 <= int(s.get("duration_seconds", 0) or 0) < 120])
-        lt3 = len([s for s in completed if 120 <= int(s.get("duration_seconds", 0) or 0) < 180])
-        gt3 = len([s for s in completed if int(s.get("duration_seconds", 0) or 0) >= 180])
-
-        total_completed = len(completed) or 1
-
-        def pct(n):
-            return int((n / total_completed) * 100)
-
-        total_props = len(props)
-        total_tenants = len(tenants)
-        total_paid = len([t for t in tenants if t.get("paid")])
-
-        app_users = len(set(
-            p.get("user_id") for p in props if p.get("user_id")
-        )) if props else 0
-
-        if pct(gt3) >= 30:
-            rating = "🔥 التطبيق ممتاز — المستخدمون يتفاعلون بعمق"
-        elif pct(lt1) >= 60:
-            rating = "⚠️ أغلب المستخدمين يخرجون سريعاً — راجع تجربة المستخدم"
-        else:
-            rating = "✅ التطبيق يعمل بشكل جيد"
-
-        text = (
-            f"📊 *إحصائيات مُلّاك*\n"
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"👥 المستخدمون الكلي: `{total_users}`\n"
-            f"📱 إجمالي الجلسات: `{total_sessions}`\n"
-            f"🔁 الراجعون: `{returning}` ({pct_ret}%)\n"
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"⏱️ متوسط الاستخدام: `{avg_min}:{avg_rem:02d}` دقيقة\n"
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"📊 *توزيع مدة الاستخدام:*\n"
-            f"• أقل من دقيقة: `{lt1}` ({pct(lt1)}%)\n"
-            f"• 1–2 دقيقة: `{lt2}` ({pct(lt2)}%)\n"
-            f"• 2–3 دقائق: `{lt3}` ({pct(lt3)}%)\n"
-            f"• أكثر من 3 دقائق: `{gt3}` ({pct(gt3)}%)\n"
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"🏗️ مستخدمو التطبيق: `{app_users}`\n"
-            f"🏢 العقارات: `{total_props}`\n"
-            f"🧑‍💼 المستأجرون: `{total_tenants}` (مدفوع: `{total_paid}`)\n"
-            f"━━━━━━━━━━━━━━━━━\n"
-            f"📌 *التقييم:* {rating}"
-        )
+        sessions = sb_select("sessions", order="started_at.desc")
+        text = _analytics_text(sessions, "📊 *إحصائيات مُلّاك — الكلية*")
         bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-
     except Exception as e:
         bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
 
+@bot.message_handler(commands=["today"])
+def send_today_stats(msg):
+    if str(msg.from_user.id) != str(ADMIN_ID):
+        return
+
+    try:
+        sessions = sb_select("sessions", order="started_at.desc")
+        now_utc = datetime.now(timezone.utc)
+        start_today = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+        today_sessions = _filter_sessions_since(sessions, start_today)
+
+        text = _analytics_text(today_sessions, "📅 *إحصائيات اليوم*")
+        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
+
+@bot.message_handler(commands=["week"])
+def send_week_stats(msg):
+    if str(msg.from_user.id) != str(ADMIN_ID):
+        return
+
+    try:
+        sessions = sb_select("sessions", order="started_at.desc")
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        week_sessions = _filter_sessions_since(sessions, since)
+
+        text = _analytics_text(week_sessions, "📈 *إحصائيات آخر 7 أيام*")
+        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: not (m.text or "").startswith("/"))
 def default(msg):
     bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
 
-
 # ============================================================
-# 🚀 Run
+# 🚀 تشغيل
 # ============================================================
 if __name__ == "__main__":
     if BOT_TOKEN:
         scheduler = BackgroundScheduler(timezone="UTC")
+
         scheduler.add_job(
             send_daily_reminders,
             "cron",
@@ -1005,8 +1016,18 @@ if __name__ == "__main__":
             minute=0,
             id="daily_reminders"
         )
+
+        scheduler.add_job(
+            send_admin_daily_analytics,
+            "cron",
+            hour=18,
+            minute=0,
+            id="admin_daily_analytics"
+        )
+
         scheduler.start()
         print("✅ جدولة التذكيرات اليومية تعمل (9 ص بتوقيت السعودية)")
+        print("✅ جدولة تقرير الإحصائيات اليومي تعمل (9 م بتوقيت السعودية)")
 
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
