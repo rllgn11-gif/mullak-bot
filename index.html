@@ -241,6 +241,14 @@
     <div class="menu-card blue"   onclick="goTo('propReports')"><div class="menu-icon">🏗️</div><div class="menu-label">تقرير العقارات</div><div class="menu-sub">كل عقار على حدة</div></div>
     <div class="menu-card red"    onclick="goTo('reminders')"><div class="menu-icon">🔔</div><div class="menu-label">التذكيرات</div><div class="menu-sub">من لم يدفع بعد</div></div>
     <div class="menu-card green"  onclick="goTo('listTenants')"><div class="menu-icon">👥</div><div class="menu-label">المستأجرون</div><div class="menu-sub">تعديل وحذف</div></div>
+    <div class="menu-card full" id="subBanner" onclick="goTo('subscription')" style="background:linear-gradient(135deg,#0f2a4a,#1a1a35);border-color:#2a4a7f;cursor:pointer;position:relative;overflow:hidden;">
+      <div class="menu-icon" style="background:rgba(245,158,11,.15);margin-bottom:0;flex-shrink:0;">💳</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px;" id="subBannerTitle">اشتراكي</div>
+        <div style="font-size:11px;color:var(--muted);" id="subBannerSub">جاري التحميل...</div>
+      </div>
+      <div style="font-size:18px;opacity:.5;">←</div>
+    </div>
     <div class="menu-card full" style="background:linear-gradient(135deg,#1e3a5f,#1a2235);border-color:#2a4a7f;cursor:default;">
       <div class="menu-icon" style="background:rgba(59,130,246,.15);margin-bottom:0;">🗓️</div>
       <div style="flex:1;"><div id="currentDate" style="font-size:13px;font-weight:700;margin-bottom:2px;"></div><div id="currentTime" style="font-size:12px;color:#60a5fa;font-weight:600;"></div></div>
@@ -373,7 +381,7 @@
 </div>
 
 <div class="screen" id="listExpenses">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">سجل المصروفات</div><button class="pdf-btn" onclick="openPDFAuth('expenses')">📄 PDF</button></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">سجل المصروفات</div><div style="width:36px"></div></div>
   <div class="list-body" id="expensesList"></div>
 </div>
 
@@ -383,7 +391,7 @@
 </div>
 
 <div class="screen" id="propReports">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تقرير العقارات</div><button class="pdf-btn" onclick="openPDFAuth('properties')">📄 PDF</button></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تقرير العقارات</div><div style="width:36px"></div></div>
   <div id="propReportsContent" style="padding-bottom:20px;"></div>
 </div>
 
@@ -393,8 +401,21 @@
 </div>
 
 <div class="screen" id="listTenants">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">المستأجرون</div><button class="pdf-btn" onclick="openPDFAuth('tenants')">📄 PDF</button></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">المستأجرون</div><div style="width:36px"></div></div>
   <div class="list-body" id="tenantList"></div>
+</div>
+
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 💳 شاشة الاشتراك                          -->
+<!-- ══════════════════════════════════════════ -->
+<div class="screen" id="subscription">
+  <div class="header">
+    <div class="back-btn" onclick="goBack()">←</div>
+    <div class="header-title">اشتراكي 💳</div>
+    <div style="width:36px"></div>
+  </div>
+  <div id="subContent" style="padding:20px 16px;flex:1;"></div>
 </div>
 
 <div class="screen" id="success">
@@ -426,6 +447,7 @@ let currentTenantPeriod  = 'يوم';
 let currentExpCat        = 'صيانة';
 let editPaidStatus       = false;
 let confirmCallback      = null;
+let subData              = {status:'none', active:false, days_left:0};
 
 const fmt      = n => Number(n||0).toLocaleString('ar-SA');
 const catIcons = {'صيانة':'🔧','رواتب':'👷','فواتير':'💡','تسويق':'📢','قانوني':'⚖️','أخرى':'📦'};
@@ -528,9 +550,14 @@ async function login() {
   if (!res.ok) throw new Error(data.error || 'فشل التحقق');
 
   jwtToken = data.token;
+  subData  = {
+    status:   data.sub_status  || 'none',
+    active:   data.sub_status  && data.sub_status !== 'none' && (data.sub_days || 0) > 0,
+    days_left: data.sub_days   || 0,
+    expires:   data.sub_expires || ''
+  };
   document.getElementById('userName').textContent = data.first_name || 'مُلّاك';
 
-  // ✅ المتغيرات معرّفة مسبقاً — لا يوجد خطأ الآن
   if (data.session_id) {
     sessionId        = data.session_id;
     sessionStartTime = Date.now();
@@ -542,9 +569,8 @@ async function init() {
   try {
     const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
     await login();
-    setTimeout(() => goTo('home'), 1400);
+    setTimeout(() => { updateSubBanner(); goTo('home'); }, 1400);
   } catch(e) {
-    // ✅ إذا فشل login لا ننتقل للـ home — نبقى في splash
     console.error('Login failed:', e.message);
   }
 }
@@ -559,7 +585,8 @@ function goTo(screen) {
   if (screen !== nav[nav.length-1]) nav.push(screen);
   const renders = { home:loadHome, addUnits:renderUnitPropList, addTenant:renderTenantForm,
     addExpense:renderExpenseForm, paid:loadPaidList, listExpenses:loadExpensesList,
-    report:loadReport, propReports:loadPropReports, reminders:loadReminders, listTenants:loadTenantList };
+    report:loadReport, propReports:loadPropReports, reminders:loadReminders, listTenants:loadTenantList,
+    subscription:loadSubscription };
   if (renders[screen]) renders[screen]();
 }
 function goBack() {
@@ -877,30 +904,6 @@ async function loadReport(){
     c.innerHTML=`<div class="report-summary"><div class="report-card"><div class="report-label">📥 إجمالي الواردات</div><div class="report-value teal">${fmt(total)}</div></div><div class="report-card"><div class="report-label">✅ المحصّل</div><div class="report-value green">${fmt(s.income)}</div></div><div class="report-card"><div class="report-label">📤 إجمالي المصروفات</div><div class="report-value red">${fmt(s.expenses)}</div></div><div class="report-card"><div class="report-label">💰 صافي الربح</div><div class="report-value ${(s.net||0)>=0?'gold':'red'}">${fmt(s.net)}</div></div></div><div class="section-divider">🧑‍💼 المستأجرون</div><div style="padding:0 16px 20px;">${t.map(x=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon ${x.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${x.name}</div><div class="list-item-sub">${x.properties?.name||''} · وحدة ${x.unit_num} · ${x.period_label||''} · ${fmt(x.rent)} ريال${x.end_date?`<br>📅 ينتهي: ${x.end_date}`:''}</div></div><span class="list-item-badge ${x.paid?'badge-green':'badge-red'}">${x.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('')}</div>`;
   }catch(e){c.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;}
 }
-// ============================================================
-// PDF — فتح تقارير منفصلة
-// ============================================================
-function openPDF(type) {
-  const win = window.open(`${API}/api/pdf/${type}`, '_blank');
-  if (!win) {
-    toast('⚠️ افتح التقرير من المتصفح مباشرة', 'error');
-  }
-}
-
-// نعيد توجيه الطلب مع JWT عبر fetch ثم نفتح النافذة
-async function openPDFAuth(type) {
-  try {
-    const res = await fetch(`${API}/api/pdf/${type}`, {
-      headers: { 'Authorization': `Bearer ${jwtToken}` }
-    });
-    if (!res.ok) throw new Error('فشل إنشاء التقرير');
-    const html = await res.text();
-    const win = window.open('', '_blank');
-    if (win) { win.document.write(html); win.document.close(); }
-    else toast('⚠️ افتح من المتصفح', 'error');
-  } catch(e) { toast('❌ ' + e.message, 'error'); }
-}
-
 async function exportPDF(){
   setBtn('pdfBtn',true,'جاري التحضير...');
   try{
@@ -953,6 +956,123 @@ async function loadTenantList(){
 }
 
 function showSuccess(title,sub){document.getElementById('successTitle').textContent=title;document.getElementById('successSub').textContent=sub;goTo('success');}
+
+
+// ════════════════════════════════════════════════════
+// 💳 نظام الاشتراك
+// ════════════════════════════════════════════════════
+function updateSubBanner() {
+  const title = document.getElementById('subBannerTitle');
+  const sub   = document.getElementById('subBannerSub');
+  if (!title || !sub) return;
+
+  const d = subData;
+  if (!d || d.status === 'none') {
+    title.textContent = '💳 اشتراكي';
+    sub.textContent   = 'لا يوجد اشتراك';
+    return;
+  }
+  if (d.status === 'trial') {
+    title.textContent = '🎁 فترة تجريبية';
+    sub.style.color   = 'var(--gold)';
+    sub.textContent   = `${d.days_left} يوم متبقي من التجربة المجانية`;
+  } else if (d.status === 'active') {
+    title.textContent = '✅ اشتراك نشط';
+    sub.style.color   = 'var(--green)';
+    sub.textContent   = `${d.days_left} يوم متبقي · شهري`;
+  } else {
+    title.textContent = '⚠️ اشتراكي';
+    sub.style.color   = 'var(--red)';
+    sub.textContent   = 'انتهى الاشتراك — اضغط للتجديد';
+  }
+}
+
+async function loadSubscription() {
+  const c = document.getElementById('subContent');
+  c.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const d = await api('GET', '/api/subscription/status');
+    subData  = d;
+    updateSubBanner();
+
+    const statusColor = d.active
+      ? (d.status === 'trial' ? 'var(--gold)' : 'var(--green)')
+      : 'var(--red)';
+    const statusLabel = d.status === 'trial'  ? '🎁 تجريبي'
+                      : d.status === 'active' ? '✅ نشط'
+                      : '❌ منتهٍ';
+    const expiryText = d.expires_at
+      ? new Date(d.expires_at).toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})
+      : '—';
+
+    c.innerHTML = `
+      <!-- بطاقة الحالة -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px 20px;margin-bottom:16px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">${d.active ? (d.status==='trial'?'🎁':'✅') : '🔒'}</div>
+        <div style="font-size:22px;font-weight:800;color:${statusColor};margin-bottom:6px;">${statusLabel}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+          ${d.active ? `<span style="color:${statusColor};font-weight:700">${d.days_left} يوم</span> متبقي — ينتهي ${expiryText}` : 'اشتراكك منتهٍ'}
+        </div>
+        ${d.active ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px 16px;font-size:12px;color:var(--muted);">
+          يمكنك مشاهدة البيانات والتقارير<br>
+          ${d.status==='active'?'الاشتراك يجدد تلقائياً كل شهر':''}
+        </div>` : ''}
+      </div>
+
+      <!-- خطة الاشتراك -->
+      <div style="background:linear-gradient(135deg,#1e3a5f,#0f2030);border:1px solid #2a4a7f;border-radius:18px;padding:24px 20px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">📦 الخطة الشهرية</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">وصول كامل لجميع المميزات</div>
+          </div>
+          <div style="text-align:left;">
+            <div style="font-size:28px;font-weight:900;color:var(--gold);">29</div>
+            <div style="font-size:11px;color:var(--muted);">ريال / شهر</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px;margin-bottom:20px;font-size:12px;color:#94a3b8;">
+          <div>✅ إدارة عقارات بلا حدود</div>
+          <div>✅ تقارير PDF قابلة للطباعة</div>
+          <div>✅ تذكيرات يومية عبر تيليجرام</div>
+          <div>✅ إحصائيات مالية شاملة</div>
+        </div>
+        <button class="submit-btn blue" id="payBtn" onclick="startCheckout()" style="width:100%;">
+          ${d.active ? '🔄 تجديد الاشتراك' : '💳 اشترك الآن — 29 ريال/شهر'}
+        </button>
+      </div>
+
+      <div style="text-align:center;font-size:11px;color:var(--muted);line-height:1.8;padding:0 8px;">
+        الدفع عبر بوابة جيديا الآمنة 🔒<br>
+        مدى · فيزا · ماستركارد · أبل باي
+      </div>`;
+  } catch(e) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;
+  }
+}
+
+async function startCheckout() {
+  const btn = document.getElementById('payBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري التحضير...'; }
+  try {
+    const d = await api('POST', '/api/subscription/checkout');
+    if (d.payment_url) {
+      window.open(d.payment_url, '_blank');
+      toast('✅ تم فتح صفحة الدفع', 'success');
+      // إعادة تحميل الحالة بعد 5 ثوانٍ
+      setTimeout(() => loadSubscription(), 5000);
+    } else {
+      toast('❌ فشل إنشاء رابط الدفع', 'error');
+    }
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💳 اشترك الآن — 29 ريال/شهر'; }
+  }
+}
+
+// اعتراض أخطاء الاشتراك (SUB_EXPIRED) من أي endpoint
+const _origApi = api;
 
 function updateDateTime(){
   const n=new Date();
