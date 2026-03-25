@@ -29,6 +29,15 @@ ADMIN_ID     = os.environ.get("ADMIN_ID", "")
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/")
 RAILWAY_URL  = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
 
+# 💳 Geidea
+GEIDEA_PUBLIC_KEY   = os.environ.get("GEIDEA_PUBLIC_KEY", "")
+GEIDEA_API_PASSWORD = os.environ.get("GEIDEA_API_PASSWORD", "")
+
+# 💰 خطة الاشتراك
+PLAN_MONTHLY_AMOUNT = float(os.environ.get("PLAN_MONTHLY_AMOUNT", "29"))
+PLAN_MONTHLY_DAYS   = 30
+TRIAL_DAYS          = 7
+
 # ✅ CORS مقيّد — مطابقة تامة فقط
 ALLOWED_ORIGINS = [
     "https://rllgn11-gif.github.io",
@@ -176,6 +185,53 @@ def require_auth(f):
         return f(user, *args, **kwargs)
     return decorated
 
+
+# ============================================================
+# 💳 نظام الاشتراك
+# ============================================================
+from datetime import timedelta
+
+def get_subscription(user_id: str):
+    try:
+        rows = sb_select("subscriptions", {"user_id": f"eq.{user_id}"})
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+def sub_is_active(user_id: str):
+    """True إذا كان الاشتراك نشطاً (تجريبي أو مدفوع)"""
+    sub = get_subscription(user_id)
+    if not sub:
+        return False
+    expires = sub.get("expires_at", "")
+    if not expires:
+        return False
+    try:
+        exp_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+        return datetime.now(timezone.utc) < exp_dt
+    except Exception:
+        return False
+
+def sub_days_left(user_id: str):
+    sub = get_subscription(user_id)
+    if not sub or not sub.get("expires_at"):
+        return 0
+    try:
+        exp_dt = datetime.fromisoformat(sub["expires_at"].replace("Z", "+00:00"))
+        delta  = exp_dt - datetime.now(timezone.utc)
+        return max(0, delta.days)
+    except Exception:
+        return 0
+
+def require_write(f):
+    """ديكوريتر للعمليات الكتابية فقط — يمنع الإضافة/الحذف عند انتهاء الاشتراك"""
+    @wraps(f)
+    def decorated(user, *args, **kwargs):
+        if not sub_is_active(user["user_id"]):
+            return jsonify({"error": "اشتراكك منتهٍ — جدّد للمتابعة", "code": "SUB_EXPIRED"}), 403
+        return f(user, *args, **kwargs)
+    return decorated
+
 # ============================================================
 # 🔐 Auth — تسجيل دخول عبر Telegram HMAC
 # ============================================================
@@ -209,12 +265,41 @@ def auth():
         pass
 
     token = create_jwt(user_id, first_name)
+
+    # 🎁 منح تجربة مجانية للمستخدمين الجدد
+    sub_status   = "none"
+    sub_expires  = None
+    sub_days     = 0
+    try:
+        existing_sub = get_subscription(user_id)
+        if not existing_sub:
+            trial_exp = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
+            sb_insert("subscriptions", {
+                "user_id":    user_id,
+                "plan":       "trial",
+                "status":     "trial",
+                "expires_at": trial_exp,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+            sub_status  = "trial"
+            sub_expires = trial_exp
+            sub_days    = TRIAL_DAYS
+        else:
+            sub_status  = existing_sub.get("status", "none")
+            sub_expires = existing_sub.get("expires_at")
+            sub_days    = sub_days_left(user_id)
+    except Exception as e:
+        print(f"Sub init error: {e}")
+
     return jsonify({
-        "token":      token,
-        "user_id":    user_id,
-        "first_name": first_name,
-        "username":   user.get("username", ""),
-        "session_id": session_id
+        "token":       token,
+        "user_id":     user_id,
+        "first_name":  first_name,
+        "username":    user.get("username", ""),
+        "session_id":  session_id,
+        "sub_status":  sub_status,
+        "sub_expires": sub_expires,
+        "sub_days":    sub_days,
     })
 
 @app.route("/", methods=["GET"])
@@ -277,6 +362,7 @@ def get_properties(user):
 
 @app.route("/api/properties", methods=["POST"])
 @require_auth
+@require_write
 @rate_limit(max_calls=20, period=60)
 def add_property(user):
     try:
@@ -297,6 +383,7 @@ def add_property(user):
 
 @app.route("/api/properties/<prop_id>", methods=["PUT"])
 @require_auth
+@require_write
 def edit_property(user, prop_id):
     try:
         d       = request.json or {}
@@ -310,6 +397,7 @@ def edit_property(user, prop_id):
 
 @app.route("/api/properties/<prop_id>", methods=["DELETE"])
 @require_auth
+@require_write
 def delete_property(user, prop_id):
     try:
         sb_delete("properties", {"id": f"eq.{prop_id}", "user_id": f"eq.{user['user_id']}"})
@@ -333,6 +421,7 @@ def get_units(user):
 
 @app.route("/api/units", methods=["POST"])
 @require_auth
+@require_write
 def add_unit(user):
     try:
         d = request.json or {}
@@ -348,6 +437,7 @@ def add_unit(user):
 
 @app.route("/api/units/<unit_id>", methods=["DELETE"])
 @require_auth
+@require_write
 def delete_unit(user, unit_id):
     try:
         sb_delete("units", {"id": f"eq.{unit_id}", "user_id": f"eq.{user['user_id']}"})
@@ -370,6 +460,7 @@ def get_tenants(user):
 
 @app.route("/api/tenants", methods=["POST"])
 @require_auth
+@require_write
 @rate_limit(max_calls=20, period=60)
 def add_tenant(user):
     try:
@@ -403,6 +494,7 @@ def add_tenant(user):
 
 @app.route("/api/tenants/<tenant_id>", methods=["PUT"])
 @require_auth
+@require_write
 def edit_tenant(user, tenant_id):
     try:
         d       = request.json or {}
@@ -428,6 +520,7 @@ def edit_tenant(user, tenant_id):
 
 @app.route("/api/tenants/<tenant_id>", methods=["DELETE"])
 @require_auth
+@require_write
 def delete_tenant(user, tenant_id):
     try:
         data = sb_select("tenants",
@@ -447,6 +540,7 @@ def delete_tenant(user, tenant_id):
 
 @app.route("/api/tenants/<tenant_id>/pay", methods=["POST"])
 @require_auth
+@require_write
 def pay_tenant(user, tenant_id):
     try:
         result = sb_update("tenants",
@@ -458,6 +552,7 @@ def pay_tenant(user, tenant_id):
 
 @app.route("/api/tenants/reset", methods=["POST"])
 @require_auth
+@require_write
 def reset_tenants(user):
     try:
         sb_update("tenants", {"user_id": f"eq.{user['user_id']}"}, {"paid": False})
@@ -480,6 +575,7 @@ def get_expenses(user):
 
 @app.route("/api/expenses", methods=["POST"])
 @require_auth
+@require_write
 @rate_limit(max_calls=20, period=60)
 def add_expense(user):
     try:
@@ -500,6 +596,7 @@ def add_expense(user):
 
 @app.route("/api/expenses/<exp_id>", methods=["DELETE"])
 @require_auth
+@require_write
 def delete_expense(user, exp_id):
     try:
         sb_delete("expenses", {"id": f"eq.{exp_id}", "user_id": f"eq.{user['user_id']}"})
@@ -533,6 +630,154 @@ def get_stats(user):
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
+# ============================================================
+# 💳 Subscription Endpoints
+# ============================================================
+@app.route("/api/subscription/status", methods=["GET"])
+@require_auth
+def subscription_status(user):
+    """يرجع حالة الاشتراك الحالية"""
+    try:
+        sub = get_subscription(user["user_id"])
+        if not sub:
+            return jsonify({"status": "none", "active": False, "days_left": 0})
+
+        active   = sub_is_active(user["user_id"])
+        days     = sub_days_left(user["user_id"])
+        return jsonify({
+            "status":     sub.get("status", "none"),
+            "plan":       sub.get("plan", ""),
+            "active":     active,
+            "expires_at": sub.get("expires_at", ""),
+            "days_left":  days,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/subscription/checkout", methods=["POST"])
+@require_auth
+@rate_limit(max_calls=5, period=60)
+def create_checkout(user):
+    """ينشئ جلسة دفع Geidea ويرجع رابط الدفع"""
+    try:
+        if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
+            return jsonify({"error": "بيانات Geidea غير مضبوطة في المتغيرات"}), 500
+
+        order_id     = f"mullak_{user['user_id']}_{int(time.time())}"
+        callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
+        return_url   = MINI_APP_URL + "?payment=done"
+
+        payload = {
+            "amount":        PLAN_MONTHLY_AMOUNT,
+            "currency":      "SAR",
+            "merchantRefId": order_id,
+            "callbackUrl":   callback_url,
+            "returnUrl":     return_url,
+            "description":   "اشتراك مُلّاك الشهري",
+            "language":      "ar",
+            "customerEmail": f"user_{user['user_id']}@mullak.app",
+        }
+
+        resp = requests.post(
+            "https://api.merchant.geidea.net/payment-intent/api/v2/direct/session",
+            json=payload,
+            auth=(GEIDEA_PUBLIC_KEY, GEIDEA_API_PASSWORD),
+            timeout=15
+        )
+
+        if not resp.ok:
+            print(f"Geidea error: {resp.status_code} — {resp.text}")
+            return jsonify({"error": "فشل إنشاء جلسة الدفع — تحقق من بيانات Geidea"}), 502
+
+        data        = resp.json()
+        payment_url = data.get("session", {}).get("paymentUrl", "")
+
+        if not payment_url:
+            return jsonify({"error": "لم يرجع Geidea رابط الدفع"}), 502
+
+        # حفظ الطلب مؤقتاً لتتبعه في الـ callback
+        try:
+            sb_insert("payment_orders", {
+                "user_id":    user["user_id"],
+                "order_id":   order_id,
+                "amount":     PLAN_MONTHLY_AMOUNT,
+                "status":     "pending",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+        except Exception:
+            pass  # الجدول اختياري
+
+        return jsonify({"payment_url": payment_url, "order_id": order_id})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/subscription/callback", methods=["POST"])
+def payment_callback():
+    """Geidea تستدعيه تلقائياً بعد الدفع"""
+    try:
+        data   = request.json or {}
+        status = (data.get("status") or data.get("responseCode") or "").lower()
+        ref_id = (data.get("merchantRefId") or
+                  data.get("detail", {}).get("merchantRefId") or "")
+
+        print(f"📩 Geidea Callback: status={status} ref={ref_id}")
+
+        if status not in ("success", "000") or not ref_id.startswith("mullak_"):
+            return jsonify({"ok": False}), 200
+
+        parts   = ref_id.split("_")
+        user_id = parts[1] if len(parts) >= 2 else ""
+        if not user_id:
+            return jsonify({"ok": False}), 200
+
+        now_utc  = datetime.now(timezone.utc)
+        existing = get_subscription(user_id)
+
+        # الاشتراك يُضاف على ما تبقى (لو جدّد مبكراً)
+        if existing and existing.get("expires_at") and sub_is_active(user_id):
+            try:
+                base = datetime.fromisoformat(existing["expires_at"].replace("Z", "+00:00"))
+            except Exception:
+                base = now_utc
+        else:
+            base = now_utc
+
+        new_expires = (base + timedelta(days=PLAN_MONTHLY_DAYS)).isoformat()
+
+        if existing:
+            sb_update("subscriptions", {"user_id": f"eq.{user_id}"}, {
+                "plan":       "monthly",
+                "status":     "active",
+                "expires_at": new_expires,
+                "updated_at": now_utc.isoformat()
+            })
+        else:
+            sb_insert("subscriptions", {
+                "user_id":    user_id,
+                "plan":       "monthly",
+                "status":     "active",
+                "expires_at": new_expires,
+                "created_at": now_utc.isoformat()
+            })
+
+        # تحديث حالة الطلب
+        try:
+            sb_update("payment_orders", {"order_id": f"eq.{ref_id}"},
+                      {"status": "paid", "paid_at": now_utc.isoformat()})
+        except Exception:
+            pass
+
+        print(f"✅ اشتراك مُفعَّل: user={user_id} expires={new_expires}")
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        print(f"❌ خطأ في Callback: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # 📄 تقرير PDF
 # ============================================================
 @app.route("/api/report/print", methods=["GET"])
@@ -638,192 +883,6 @@ tr:nth-child(even) td{{background:#f8fafc}}
         return Response(html, mimetype="text/html; charset=utf-8")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# ============================================================
-# 🖨️ دالة HTML مشتركة للطباعة
-# ============================================================
-def html_wrapper(title, body):
-    today = datetime.now().strftime("%Y/%m/%d")
-    return f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-<title>{title} — {today}</title>
-<style>
-*{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a2e;direction:rtl;font-size:13px}}
-.header{{background:linear-gradient(135deg,#1e3a5f,#0a0e1a);color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center}}
-.logo{{font-size:28px;font-weight:900}}.logo span{{color:#10b981}}
-.section{{padding:20px 32px}}
-.section-title{{font-size:15px;font-weight:800;color:#1e3a5f;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid #3b82f6}}
-table{{width:100%;border-collapse:collapse;font-size:12px}}
-th{{background:#1e3a5f;color:#fff;padding:10px 8px;text-align:right;font-weight:700}}
-td{{padding:9px 8px;border-bottom:1px solid #e2e8f0}}
-tr:nth-child(even) td{{background:#f8fafc}}
-.footer{{background:#f1f5f9;padding:14px 32px;text-align:center;font-size:11px;color:#64748b;margin-top:20px}}
-.print-hint{{background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 20px;text-align:center;font-size:12px;font-weight:700;color:#92400e;margin:12px 32px;}}
-@media print{{.print-hint{{display:none}}body{{font-size:11px}}}}
-</style></head><body>
-<div class="header">
-  <div><div class="logo">مُلّ<span>اك</span></div><div style="font-size:12px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
-  <div style="text-align:left;font-size:13px;font-weight:700;opacity:.9">{title}<br><span style="font-size:11px;opacity:.7">{today}</span></div>
-</div>
-<div class="print-hint">📱 لحفظ PDF: اضغط Ctrl+P أو شارك من المتصفح ← حفظ PDF</div>
-{body}
-<div class="footer">تم إنشاء هذا التقرير بواسطة نظام مُلّاك — {today}</div>
-<script>window.onload=function(){{window.print()}}</script>
-</body></html>"""
-
-
-# ============================================================
-# 📄 PDF — المستأجرون
-# ============================================================
-@app.route("/api/pdf/tenants", methods=["GET"])
-@require_auth
-def pdf_tenants(user):
-    try:
-        uid     = user["user_id"]
-        tenants = sb_select("tenants", {"user_id": f"eq.{uid}"}, select="*,properties(name)")
-        fmt     = lambda n: f"{int(n or 0):,}"
-
-        rows = ""
-        for t in tenants:
-            color  = "#10b981" if t.get("paid") else "#ef4444"
-            status = "✅ دفع" if t.get("paid") else "❌ لم يدفع"
-            prop   = (t.get("properties") or {}).get("name", "—")
-            rows += f"""<tr>
-              <td>{t['name']}</td><td>{t.get('phone','—')}</td>
-              <td>{prop}</td><td>وحدة {t.get('unit_num','—')}</td>
-              <td>{t.get('period_label','—')}</td>
-              <td>{t.get('start_date','—')}</td><td>{t.get('end_date','—')}</td>
-              <td>{fmt(t.get('rent',0))} ريال</td>
-              <td style="color:{color};font-weight:700">{status}</td>
-            </tr>"""
-
-        total_r   = sum(t.get("rent",0) for t in tenants)
-        collected = sum(t.get("rent",0) for t in tenants if t.get("paid"))
-        pending   = total_r - collected
-
-        body = f"""
-<div class="section">
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#10b981">{fmt(collected)} ريال</div>
-      <div style="font-size:11px;color:#64748b;margin-top:4px">✅ المحصّل</div></div>
-    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#ef4444">{fmt(pending)} ريال</div>
-      <div style="font-size:11px;color:#64748b;margin-top:4px">⏳ المعلّق</div></div>
-    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#0ea5e9">{len(tenants)} مستأجر</div>
-      <div style="font-size:11px;color:#64748b;margin-top:4px">👥 الإجمالي</div></div>
-  </div>
-  <div class="section-title">🧑‍💼 قائمة المستأجرين</div>
-  <table>
-    <tr><th>الاسم</th><th>الهاتف</th><th>العقار</th><th>الوحدة</th><th>المدة</th><th>البداية</th><th>النهاية</th><th>الإيجار</th><th>الحالة</th></tr>
-    {rows or '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:20px">لا يوجد مستأجرون</td></tr>'}
-  </table>
-</div>"""
-
-        return Response(html_wrapper("قائمة المستأجرين", body), mimetype="text/html; charset=utf-8")
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ============================================================
-# 📄 PDF — العقارات
-# ============================================================
-@app.route("/api/pdf/properties", methods=["GET"])
-@require_auth
-def pdf_properties(user):
-    try:
-        uid      = user["user_id"]
-        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
-        tenants  = sb_select("tenants",    {"user_id": f"eq.{uid}"})
-        expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"})
-        fmt      = lambda n: f"{int(n or 0):,}"
-
-        rows = ""
-        for p in props:
-            pt  = [t for t in tenants  if t.get("property_id") == p["id"]]
-            pe  = [e for e in expenses if e.get("property_id") == p["id"]]
-            inc = sum(t["rent"] for t in pt if t.get("paid"))
-            tot = sum(t["rent"] for t in pt)
-            exp = sum(e.get("amount",0) for e in pe)
-            if p.get("type") == "مستثمر": exp += p.get("investor_rent",0)
-            net = inc - exp
-            color = "#f59e0b" if net >= 0 else "#ef4444"
-            rows += f"""<tr>
-              <td style="font-weight:700">{p['name']}</td>
-              <td>{p.get('location','—')}</td>
-              <td>{p.get('type','—')}</td>
-              <td style="text-align:center">{len(pt)}</td>
-              <td>{fmt(tot)} ريال</td>
-              <td>{fmt(inc)} ريال</td>
-              <td>{fmt(exp)} ريال</td>
-              <td style="color:{color};font-weight:700">{fmt(net)} ريال</td>
-            </tr>"""
-
-        body = f"""
-<div class="section">
-  <div class="section-title">🏢 قائمة العقارات ({len(props)} عقار)</div>
-  <table>
-    <tr><th>اسم العقار</th><th>الموقع</th><th>النوع</th><th>المستأجرون</th><th>إجمالي الإيجار</th><th>المحصّل</th><th>المصروفات</th><th>الصافي</th></tr>
-    {rows or '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:20px">لا يوجد عقارات</td></tr>'}
-  </table>
-</div>"""
-
-        return Response(html_wrapper("تقرير العقارات", body), mimetype="text/html; charset=utf-8")
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ============================================================
-# 📄 PDF — المصروفات
-# ============================================================
-@app.route("/api/pdf/expenses", methods=["GET"])
-@require_auth
-def pdf_expenses(user):
-    try:
-        uid      = user["user_id"]
-        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
-        expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"}, order="created_at.desc")
-        fmt      = lambda n: f"{int(n or 0):,}"
-
-        rows = ""
-        for e in expenses:
-            prop_name = "—"
-            if e.get("property_id"):
-                p = next((x for x in props if x["id"] == e["property_id"]), None)
-                if p: prop_name = p["name"]
-            rows += f"""<tr>
-              <td>{e.get('category','—')}</td>
-              <td>{e.get('description','—')}</td>
-              <td>{prop_name}</td>
-              <td>{f"وحدة {e['unit_num']}" if e.get('unit_num') else '—'}</td>
-              <td style="font-weight:700;color:#ef4444">{fmt(e.get('amount',0))} ريال</td>
-            </tr>"""
-
-        total = sum(e.get("amount",0) for e in expenses)
-
-        body = f"""
-<div class="section">
-  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;text-align:center;margin-bottom:20px;">
-    <div style="font-size:24px;font-weight:800;color:#ef4444">{fmt(total)} ريال</div>
-    <div style="font-size:12px;color:#64748b;margin-top:4px">📤 إجمالي المصروفات ({len(expenses)} بند)</div>
-  </div>
-  <div class="section-title">📤 سجل المصروفات</div>
-  <table>
-    <tr><th>التصنيف</th><th>الوصف</th><th>العقار</th><th>الوحدة</th><th>المبلغ</th></tr>
-    {rows or '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:20px">لا توجد مصروفات</td></tr>'}
-    <tr style="background:#fef3c7;font-weight:800">
-      <td colspan="4" style="text-align:center">الإجمالي</td>
-      <td style="color:#ef4444">{fmt(total)} ريال</td>
-    </tr>
-  </table>
-</div>"""
-
-        return Response(html_wrapper("سجل المصروفات", body), mimetype="text/html; charset=utf-8")
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 
 # ============================================================
 # 🔔 الإشعارات اليومية
