@@ -640,6 +640,192 @@ tr:nth-child(even) td{{background:#f8fafc}}
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
+# 🖨️ دالة HTML مشتركة للطباعة
+# ============================================================
+def html_wrapper(title, body):
+    today = datetime.now().strftime("%Y/%m/%d")
+    return f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+<title>{title} — {today}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a2e;direction:rtl;font-size:13px}}
+.header{{background:linear-gradient(135deg,#1e3a5f,#0a0e1a);color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center}}
+.logo{{font-size:28px;font-weight:900}}.logo span{{color:#10b981}}
+.section{{padding:20px 32px}}
+.section-title{{font-size:15px;font-weight:800;color:#1e3a5f;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid #3b82f6}}
+table{{width:100%;border-collapse:collapse;font-size:12px}}
+th{{background:#1e3a5f;color:#fff;padding:10px 8px;text-align:right;font-weight:700}}
+td{{padding:9px 8px;border-bottom:1px solid #e2e8f0}}
+tr:nth-child(even) td{{background:#f8fafc}}
+.footer{{background:#f1f5f9;padding:14px 32px;text-align:center;font-size:11px;color:#64748b;margin-top:20px}}
+.print-hint{{background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 20px;text-align:center;font-size:12px;font-weight:700;color:#92400e;margin:12px 32px;}}
+@media print{{.print-hint{{display:none}}body{{font-size:11px}}}}
+</style></head><body>
+<div class="header">
+  <div><div class="logo">مُلّ<span>اك</span></div><div style="font-size:12px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
+  <div style="text-align:left;font-size:13px;font-weight:700;opacity:.9">{title}<br><span style="font-size:11px;opacity:.7">{today}</span></div>
+</div>
+<div class="print-hint">📱 لحفظ PDF: اضغط Ctrl+P أو شارك من المتصفح ← حفظ PDF</div>
+{body}
+<div class="footer">تم إنشاء هذا التقرير بواسطة نظام مُلّاك — {today}</div>
+<script>window.onload=function(){{window.print()}}</script>
+</body></html>"""
+
+
+# ============================================================
+# 📄 PDF — المستأجرون
+# ============================================================
+@app.route("/api/pdf/tenants", methods=["GET"])
+@require_auth
+def pdf_tenants(user):
+    try:
+        uid     = user["user_id"]
+        tenants = sb_select("tenants", {"user_id": f"eq.{uid}"}, select="*,properties(name)")
+        fmt     = lambda n: f"{int(n or 0):,}"
+
+        rows = ""
+        for t in tenants:
+            color  = "#10b981" if t.get("paid") else "#ef4444"
+            status = "✅ دفع" if t.get("paid") else "❌ لم يدفع"
+            prop   = (t.get("properties") or {}).get("name", "—")
+            rows += f"""<tr>
+              <td>{t['name']}</td><td>{t.get('phone','—')}</td>
+              <td>{prop}</td><td>وحدة {t.get('unit_num','—')}</td>
+              <td>{t.get('period_label','—')}</td>
+              <td>{t.get('start_date','—')}</td><td>{t.get('end_date','—')}</td>
+              <td>{fmt(t.get('rent',0))} ريال</td>
+              <td style="color:{color};font-weight:700">{status}</td>
+            </tr>"""
+
+        total_r   = sum(t.get("rent",0) for t in tenants)
+        collected = sum(t.get("rent",0) for t in tenants if t.get("paid"))
+        pending   = total_r - collected
+
+        body = f"""
+<div class="section">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#10b981">{fmt(collected)} ريال</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">✅ المحصّل</div></div>
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#ef4444">{fmt(pending)} ريال</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">⏳ المعلّق</div></div>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#0ea5e9">{len(tenants)} مستأجر</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px">👥 الإجمالي</div></div>
+  </div>
+  <div class="section-title">🧑‍💼 قائمة المستأجرين</div>
+  <table>
+    <tr><th>الاسم</th><th>الهاتف</th><th>العقار</th><th>الوحدة</th><th>المدة</th><th>البداية</th><th>النهاية</th><th>الإيجار</th><th>الحالة</th></tr>
+    {rows or '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:20px">لا يوجد مستأجرون</td></tr>'}
+  </table>
+</div>"""
+
+        return Response(html_wrapper("قائمة المستأجرين", body), mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# 📄 PDF — العقارات
+# ============================================================
+@app.route("/api/pdf/properties", methods=["GET"])
+@require_auth
+def pdf_properties(user):
+    try:
+        uid      = user["user_id"]
+        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
+        tenants  = sb_select("tenants",    {"user_id": f"eq.{uid}"})
+        expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"})
+        fmt      = lambda n: f"{int(n or 0):,}"
+
+        rows = ""
+        for p in props:
+            pt  = [t for t in tenants  if t.get("property_id") == p["id"]]
+            pe  = [e for e in expenses if e.get("property_id") == p["id"]]
+            inc = sum(t["rent"] for t in pt if t.get("paid"))
+            tot = sum(t["rent"] for t in pt)
+            exp = sum(e.get("amount",0) for e in pe)
+            if p.get("type") == "مستثمر": exp += p.get("investor_rent",0)
+            net = inc - exp
+            color = "#f59e0b" if net >= 0 else "#ef4444"
+            rows += f"""<tr>
+              <td style="font-weight:700">{p['name']}</td>
+              <td>{p.get('location','—')}</td>
+              <td>{p.get('type','—')}</td>
+              <td style="text-align:center">{len(pt)}</td>
+              <td>{fmt(tot)} ريال</td>
+              <td>{fmt(inc)} ريال</td>
+              <td>{fmt(exp)} ريال</td>
+              <td style="color:{color};font-weight:700">{fmt(net)} ريال</td>
+            </tr>"""
+
+        body = f"""
+<div class="section">
+  <div class="section-title">🏢 قائمة العقارات ({len(props)} عقار)</div>
+  <table>
+    <tr><th>اسم العقار</th><th>الموقع</th><th>النوع</th><th>المستأجرون</th><th>إجمالي الإيجار</th><th>المحصّل</th><th>المصروفات</th><th>الصافي</th></tr>
+    {rows or '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:20px">لا يوجد عقارات</td></tr>'}
+  </table>
+</div>"""
+
+        return Response(html_wrapper("تقرير العقارات", body), mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# 📄 PDF — المصروفات
+# ============================================================
+@app.route("/api/pdf/expenses", methods=["GET"])
+@require_auth
+def pdf_expenses(user):
+    try:
+        uid      = user["user_id"]
+        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
+        expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"}, order="created_at.desc")
+        fmt      = lambda n: f"{int(n or 0):,}"
+
+        rows = ""
+        for e in expenses:
+            prop_name = "—"
+            if e.get("property_id"):
+                p = next((x for x in props if x["id"] == e["property_id"]), None)
+                if p: prop_name = p["name"]
+            rows += f"""<tr>
+              <td>{e.get('category','—')}</td>
+              <td>{e.get('description','—')}</td>
+              <td>{prop_name}</td>
+              <td>{f"وحدة {e['unit_num']}" if e.get('unit_num') else '—'}</td>
+              <td style="font-weight:700;color:#ef4444">{fmt(e.get('amount',0))} ريال</td>
+            </tr>"""
+
+        total = sum(e.get("amount",0) for e in expenses)
+
+        body = f"""
+<div class="section">
+  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;text-align:center;margin-bottom:20px;">
+    <div style="font-size:24px;font-weight:800;color:#ef4444">{fmt(total)} ريال</div>
+    <div style="font-size:12px;color:#64748b;margin-top:4px">📤 إجمالي المصروفات ({len(expenses)} بند)</div>
+  </div>
+  <div class="section-title">📤 سجل المصروفات</div>
+  <table>
+    <tr><th>التصنيف</th><th>الوصف</th><th>العقار</th><th>الوحدة</th><th>المبلغ</th></tr>
+    {rows or '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:20px">لا توجد مصروفات</td></tr>'}
+    <tr style="background:#fef3c7;font-weight:800">
+      <td colspan="4" style="text-align:center">الإجمالي</td>
+      <td style="color:#ef4444">{fmt(total)} ريال</td>
+    </tr>
+  </table>
+</div>"""
+
+        return Response(html_wrapper("سجل المصروفات", body), mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
 # 🔔 الإشعارات اليومية
 # ============================================================
 def send_daily_reminders():
