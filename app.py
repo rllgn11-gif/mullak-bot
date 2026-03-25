@@ -2,7 +2,7 @@
 # 🔥 IMPORTS
 # =========================
 import os, json, time, jwt, requests, hmac, hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import telebot
@@ -22,6 +22,15 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY","")
 ADMIN_ID = os.environ.get("ADMIN_ID","")
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# =========================
+# 🌐 CORS (مهم لحل 404 OPTIONS)
+# =========================
+CORS(app)
+
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    return '', 200
 
 # =========================
 # 🚦 RATE LIMIT
@@ -98,18 +107,51 @@ def auth_required(f):
     return wrap
 
 # =========================
-# 📊 SESSION TRACK
+# 🔐 AUTH (مهم جدًا)
 # =========================
-@app.route("/api/session/start", methods=["POST"])
-def start_session():
-    uid = request.json.get("user_id")
+@app.route("/auth", methods=["POST"])
+def auth():
+    data = request.json or {}
+    user_id = data.get("initData")  # نستخدمه كمعرف مؤقت
+
+    if not user_id:
+        return jsonify({"error":"invalid"}),400
+
+    token = create_token(user_id)
+
     session = insert("sessions", {
-        "user_id": uid,
+        "user_id": user_id,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": 0
     })
-    return jsonify(session)
 
+    return jsonify({
+        "token": token,
+        "session_id": session[0]["id"] if isinstance(session,list) else ""
+    })
+
+# =========================
+# 📊 STATS
+# =========================
+@app.route("/api/stats", methods=["GET"])
+@auth_required
+def stats_api(user):
+    sessions = select("sessions", {"user_id":f"eq.{user['user_id']}"})
+
+    total = len(sessions)
+    avg = int(sum(s.get("duration_seconds",0) for s in sessions)/len(sessions)) if sessions else 0
+
+    return jsonify({
+        "props":0,
+        "tenants":0,
+        "income":0,
+        "expenses":0,
+        "net":0
+    })
+
+# =========================
+# 📊 SESSION END
+# =========================
 @app.route("/api/session/end", methods=["POST"])
 def end_session():
     d = request.json or {}
@@ -124,100 +166,57 @@ def end_session():
     return "",204
 
 # =========================
-# 📊 ANALYTICS (BOT ONLY)
+# 📄 PDF
 # =========================
-def analytics_text(sessions):
-    if not sessions:
-        return "📊 لا يوجد بيانات"
-
-    users = set(s["user_id"] for s in sessions)
-    total = len(sessions)
-
-    avg = int(sum(s.get("duration_seconds",0) for s in sessions)/len(sessions))
-    m = avg//60
-    s = avg%60
-
-    return f"""
-📊 إحصائيات الاستخدام
-━━━━━━━━━━━━━━
-👥 المستخدمون: {len(users)}
-📱 الجلسات: {total}
-⏱️ المتوسط: {m}:{s:02d}
-"""
-
-@bot.message_handler(commands=["stats"])
-def stats(msg):
-    if str(msg.from_user.id) != str(ADMIN_ID):
-        return
-
-    sessions = select("sessions")
-    bot.send_message(msg.chat.id, analytics_text(sessions))
-
-# =========================
-# 📄 PDF ENDPOINTS
-# =========================
-
-def html_wrapper(title, body):
+def html(title, body):
     return f"""
     <html dir="rtl">
     <head><meta charset="utf-8">
     <style>
     body{{font-family:Arial;padding:20px}}
-    h1{{color:#333}}
     table{{width:100%;border-collapse:collapse}}
     td,th{{border:1px solid #ccc;padding:8px}}
     </style>
     </head>
     <body>
-    <h1>{title}</h1>
+    <h2>{title}</h2>
     {body}
     <script>window.print()</script>
     </body>
     </html>
     """
 
-# =========================
-# 🧑‍💼 PDF المستأجرين
-# =========================
 @app.route("/api/pdf/tenants")
 @auth_required
 def pdf_tenants(user):
     data = select("tenants", {"user_id":f"eq.{user['user_id']}"})
-
     rows = "".join([f"<tr><td>{t['name']}</td><td>{t['rent']}</td></tr>" for t in data])
+    return Response(html("المستأجرين", f"<table><tr><th>الاسم</th><th>الإيجار</th></tr>{rows}</table>"), mimetype="text/html")
 
-    return Response(html_wrapper("المستأجرين", f"<table><tr><th>الاسم</th><th>الإيجار</th></tr>{rows}</table>"),
-                    mimetype="text/html")
-
-# =========================
-# 🏢 PDF العقارات
-# =========================
 @app.route("/api/pdf/properties")
 @auth_required
 def pdf_props(user):
     data = select("properties", {"user_id":f"eq.{user['user_id']}"})
-
     rows = "".join([f"<tr><td>{p['name']}</td><td>{p['location']}</td></tr>" for p in data])
+    return Response(html("العقارات", f"<table><tr><th>الاسم</th><th>الموقع</th></tr>{rows}</table>"), mimetype="text/html")
 
-    return Response(html_wrapper("العقارات", f"<table><tr><th>الاسم</th><th>الموقع</th></tr>{rows}</table>"),
-                    mimetype="text/html")
-
-# =========================
-# 💸 PDF المصروفات
-# =========================
 @app.route("/api/pdf/expenses")
 @auth_required
 def pdf_expenses(user):
     data = select("expenses", {"user_id":f"eq.{user['user_id']}"})
-
     rows = "".join([f"<tr><td>{e['category']}</td><td>{e['amount']}</td></tr>" for e in data])
-
-    return Response(html_wrapper("المصروفات", f"<table><tr><th>التصنيف</th><th>المبلغ</th></tr>{rows}</table>"),
-                    mimetype="text/html")
+    return Response(html("المصروفات", f"<table><tr><th>التصنيف</th><th>المبلغ</th></tr>{rows}</table>"), mimetype="text/html")
 
 # =========================
-# 🤖 WEBHOOK
+# 🤖 BOT
 # =========================
+@bot.message_handler(commands=["stats"])
+def stats(msg):
+    if str(msg.from_user.id) != str(ADMIN_ID):
+        return
+    sessions = select("sessions")
+    bot.send_message(msg.chat.id, f"📊 عدد الجلسات: {len(sessions)}")
+
 @app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     bot.process_new_updates([telebot.types.Update.de_json(request.data.decode())])
