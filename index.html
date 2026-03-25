@@ -373,7 +373,7 @@
 </div>
 
 <div class="screen" id="listExpenses">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">سجل المصروفات</div><div style="width:36px"></div></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">سجل المصروفات</div><button class="pdf-btn" onclick="openPDFAuth('expenses')">📄 PDF</button></div>
   <div class="list-body" id="expensesList"></div>
 </div>
 
@@ -383,7 +383,7 @@
 </div>
 
 <div class="screen" id="propReports">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تقرير العقارات</div><div style="width:36px"></div></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تقرير العقارات</div><button class="pdf-btn" onclick="openPDFAuth('properties')">📄 PDF</button></div>
   <div id="propReportsContent" style="padding-bottom:20px;"></div>
 </div>
 
@@ -393,7 +393,7 @@
 </div>
 
 <div class="screen" id="listTenants">
-  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">المستأجرون</div><div style="width:36px"></div></div>
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">المستأجرون</div><button class="pdf-btn" onclick="openPDFAuth('tenants')">📄 PDF</button></div>
   <div class="list-body" id="tenantList"></div>
 </div>
 
@@ -877,6 +877,30 @@ async function loadReport(){
     c.innerHTML=`<div class="report-summary"><div class="report-card"><div class="report-label">📥 إجمالي الواردات</div><div class="report-value teal">${fmt(total)}</div></div><div class="report-card"><div class="report-label">✅ المحصّل</div><div class="report-value green">${fmt(s.income)}</div></div><div class="report-card"><div class="report-label">📤 إجمالي المصروفات</div><div class="report-value red">${fmt(s.expenses)}</div></div><div class="report-card"><div class="report-label">💰 صافي الربح</div><div class="report-value ${(s.net||0)>=0?'gold':'red'}">${fmt(s.net)}</div></div></div><div class="section-divider">🧑‍💼 المستأجرون</div><div style="padding:0 16px 20px;">${t.map(x=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon ${x.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${x.name}</div><div class="list-item-sub">${x.properties?.name||''} · وحدة ${x.unit_num} · ${x.period_label||''} · ${fmt(x.rent)} ريال${x.end_date?`<br>📅 ينتهي: ${x.end_date}`:''}</div></div><span class="list-item-badge ${x.paid?'badge-green':'badge-red'}">${x.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('')}</div>`;
   }catch(e){c.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${e.message}</div></div>`;}
 }
+// ============================================================
+// PDF — فتح تقارير منفصلة
+// ============================================================
+function openPDF(type) {
+  const win = window.open(`${API}/api/pdf/${type}`, '_blank');
+  if (!win) {
+    toast('⚠️ افتح التقرير من المتصفح مباشرة', 'error');
+  }
+}
+
+// نعيد توجيه الطلب مع JWT عبر fetch ثم نفتح النافذة
+async function openPDFAuth(type) {
+  try {
+    const res = await fetch(`${API}/api/pdf/${type}`, {
+      headers: { 'Authorization': `Bearer ${jwtToken}` }
+    });
+    if (!res.ok) throw new Error('فشل إنشاء التقرير');
+    const html = await res.text();
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+    else toast('⚠️ افتح من المتصفح', 'error');
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+}
+
 async function exportPDF(){
   setBtn('pdfBtn',true,'جاري التحضير...');
   try{
