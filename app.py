@@ -21,22 +21,22 @@ app = Flask(__name__)
 # ============================================================
 # 🔑 CONFIG
 # ============================================================
-BOT_TOKEN   = os.environ.get("BOT_TOKEN", "")
-JWT_SECRET  = os.environ.get("JWT_SECRET", "mullak_secret_2024")
+BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
+JWT_SECRET   = os.environ.get("JWT_SECRET", "mullak_secret_2024")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
 ADMIN_ID     = os.environ.get("ADMIN_ID", "")
 MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://rllgn11-gif.github.io/mullak-bot/")
 RAILWAY_URL  = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip().rstrip("/")
 
-# 💳 Geidea — تأكد أن هذه المتغيرات مضبوطة في Railway
-GEIDEA_GATEWAY_KEY   = os.environ.get("GEIDEA_GATEWAY_KEY", "").strip()
+# 💳 Geidea Checkout
+GEIDEA_PUBLIC_KEY   = os.environ.get("GEIDEA_PUBLIC_KEY", "").strip()
 GEIDEA_API_PASSWORD = os.environ.get("GEIDEA_API_PASSWORD", "").strip()
 
-# Geidea Base URL — استخدم الصحيح حسب بيئتك
-# Production: https://api.merchant.geidea.net
+# Geidea Base URL
 # Sandbox:    https://api.uat.merchant.geidea.net
-GEIDEA_BASE_URL = os.environ.get("GEIDEA_BASE_URL", "https://api.merchant.geidea.net").strip().rstrip("/")
+# Production: https://api.merchant.geidea.net
+GEIDEA_BASE_URL = os.environ.get("GEIDEA_BASE_URL", "https://api.uat.merchant.geidea.net").strip().rstrip("/")
 
 # 💰 خطة الاشتراك
 PLAN_MONTHLY_AMOUNT = float(os.environ.get("PLAN_MONTHLY_AMOUNT", "29"))
@@ -298,8 +298,9 @@ def health():
     return jsonify({
         "status": "ok",
         "app": "مُلّاك 🏠",
-        "geidea_configured": bool(GEIDEA_GATEWAY_KEY and GEIDEA_API_PASSWORD),
-        "railway_url": RAILWAY_URL or "NOT SET"
+        "geidea_configured": bool(GEIDEA_PUBLIC_KEY and GEIDEA_API_PASSWORD),
+        "geidea_base_url":   GEIDEA_BASE_URL,
+        "railway_url":       RAILWAY_URL or "NOT SET"
     })
 
 # ============================================================
@@ -624,8 +625,30 @@ def get_stats(user):
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
-# 💳 Subscription Endpoints — الإصلاح الكامل
+# 💳 Geidea Checkout — الدفع والاشتراك
 # ============================================================
+
+def geidea_auth():
+    """Basic auth لـ Geidea: public key ككلمة مستخدم، API password ككلمة مرور"""
+    return (GEIDEA_PUBLIC_KEY, GEIDEA_API_PASSWORD)
+
+def extract_checkout_url(resp_data: dict) -> str:
+    """استخراج رابط صفحة الدفع من رد Geidea — يجرّب أكثر من مسار"""
+    if not isinstance(resp_data, dict):
+        return ""
+    candidates = [
+        resp_data.get("paymentUrl"),
+        resp_data.get("redirectUrl"),
+        resp_data.get("checkoutUrl"),
+        (resp_data.get("session") or {}).get("paymentUrl"),
+        (resp_data.get("session") or {}).get("redirectUrl"),
+        (resp_data.get("session") or {}).get("url"),
+    ]
+    for url in candidates:
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    return ""
+
 
 @app.route("/api/subscription/status", methods=["GET"])
 @require_auth
@@ -648,53 +671,73 @@ def subscription_status(user):
         return jsonify({"error": str(e)}), 500
 
 
-# ✅ نقطة اختبار بيانات Geidea — افتحها من متصفحك للتحقق
 @app.route("/api/test/geidea", methods=["GET"])
 def test_geidea():
-    """نقطة اختبار — تحقق من أن بيانات Geidea مضبوطة صحيحاً"""
-    if not GEIDEA_GATEWAY_KEY or not GEIDEA_API_PASSWORD:
+    """
+    نقطة اختبار — افتحها من متصفحك للتحقق من إعدادات Geidea.
+    ترجع رد Geidea الحقيقي حتى تعرف المسار الصحيح لحسابك.
+    """
+    if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
         return jsonify({
             "ok": False,
-            "error": "GEIDEA_GATEWAY_KEY أو GEIDEA_API_PASSWORD غير مضبوط في Railway Variables",
-            "geidea_public_key": "❌ غير موجود" if not GEIDEA_GATEWAY_KEY else "✅ موجود",
-            "geidea_api_password": "❌ غير موجود" if not GEIDEA_API_PASSWORD else "✅ موجود",
-            "railway_url": RAILWAY_URL or "❌ RAILWAY_PUBLIC_DOMAIN غير مضبوط",
-            "geidea_base_url": GEIDEA_BASE_URL,
+            "error": "GEIDEA_PUBLIC_KEY أو GEIDEA_API_PASSWORD غير مضبوط في Railway Variables",
+            "geidea_public_key":  "✅ موجود" if GEIDEA_PUBLIC_KEY  else "❌ غير موجود",
+            "geidea_api_password":"✅ موجود" if GEIDEA_API_PASSWORD else "❌ غير موجود",
+            "railway_url":        RAILWAY_URL  or "❌ RAILWAY_PUBLIC_DOMAIN غير مضبوط",
+            "geidea_base_url":    GEIDEA_BASE_URL,
         }), 400
 
-    # اختبار الاتصال بـ Geidea
-    try:
-        test_payload = {
-            "amount":        1.00,
-            "currency":      "SAR",
-            "merchantRefId": f"test_{int(time.time())}",
-            "callbackUrl":   f"https://{RAILWAY_URL}/api/subscription/callback",
-            "returnUrl":     MINI_APP_URL,
-            "description":   "اختبار الاتصال",
-            "language":      "ar",
-        }
+    if not RAILWAY_URL:
+        return jsonify({"ok": False, "error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط"}), 400
 
+    callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
+    return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
+    merchant_ref = f"test_{int(time.time())}"
+
+    payload = {
+        "amount":               PLAN_MONTHLY_AMOUNT,
+        "currency":             "SAR",
+        "timestamp":            datetime.now(timezone.utc).isoformat(),
+        "merchantReferenceId":  merchant_ref,
+        "callbackUrl":          callback_url,
+        "returnUrl":            return_url,
+        "language":             "ar",
+    }
+
+    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/session"
+
+    try:
         resp = requests.post(
-            f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session",
-            json=test_payload,
-            auth=(GEIDEA_GATEWAY_KEY, GEIDEA_API_PASSWORD),
-            timeout=15,
-            headers={"Content-Type": "application/json", "Accept": "application/json"}
+            url,
+            json=payload,
+            auth=geidea_auth(),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=20
         )
 
+        try:
+            body = resp.json()
+        except Exception:
+            body = {"raw": resp.text[:1000]}
+
         return jsonify({
-            "ok": resp.ok,
-            "geidea_status_code": resp.status_code,
-            "geidea_response": resp.json() if resp.headers.get("content-type","").startswith("application/json") else resp.text[:500],
+            "ok":           resp.ok,
+            "status_code":  resp.status_code,
+            "request_url":  url,
+            "payload_sent": payload,
+            "response":     body,
+            "checkout_url": extract_checkout_url(body),
             "config": {
                 "geidea_base_url": GEIDEA_BASE_URL,
-                "railway_url": RAILWAY_URL or "❌ غير مضبوط",
-                "callback_url": f"https://{RAILWAY_URL}/api/subscription/callback",
+                "callback_url":    callback_url,
+                "return_url":      return_url,
             }
         })
 
+    except requests.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "Timeout — تحقق من GEIDEA_BASE_URL"}), 502
     except requests.exceptions.ConnectionError:
-        return jsonify({"ok": False, "error": "تعذّر الاتصال بـ Geidea — تحقق من GEIDEA_BASE_URL"}), 502
+        return jsonify({"ok": False, "error": "Connection error — تحقق من GEIDEA_BASE_URL"}), 502
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -703,61 +746,52 @@ def test_geidea():
 @require_auth
 @rate_limit(max_calls=5, period=60)
 def create_checkout(user):
-    """ينشئ جلسة دفع Geidea"""
+    """ينشئ جلسة Geidea Checkout ويرجع رابط صفحة الدفع"""
 
-    # ✅ التحقق من الإعدادات أولاً
-    if not GEIDEA_GATEWAY_KEY:
-        print("❌ GEIDEA_GATEWAY_KEY غير مضبوط")
-        return jsonify({"error": "بوابة الدفع غير مضبوطة — تواصل مع الدعم (GEIDEA_GATEWAY_KEY)"}), 500
-
+    if not GEIDEA_PUBLIC_KEY:
+        return jsonify({"error": "GEIDEA_PUBLIC_KEY غير مضبوط — تواصل مع الدعم"}), 500
     if not GEIDEA_API_PASSWORD:
-        print("❌ GEIDEA_API_PASSWORD غير مضبوط")
-        return jsonify({"error": "بوابة الدفع غير مضبوطة — تواصل مع الدعم (GEIDEA_API_PASSWORD)"}), 500
-
+        return jsonify({"error": "GEIDEA_API_PASSWORD غير مضبوط — تواصل مع الدعم"}), 500
     if not RAILWAY_URL:
-        print("❌ RAILWAY_PUBLIC_DOMAIN غير مضبوط")
-        return jsonify({"error": "إعداد الخادم غير مكتمل — تواصل مع الدعم (RAILWAY_URL)"}), 500
+        return jsonify({"error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط — تواصل مع الدعم"}), 500
+
+    merchant_ref = f"mullak_{user['user_id']}_{int(time.time())}"
+    callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
+    return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
+
+    payload = {
+        "amount":               PLAN_MONTHLY_AMOUNT,
+        "currency":             "SAR",
+        "timestamp":            datetime.now(timezone.utc).isoformat(),
+        "merchantReferenceId":  merchant_ref,
+        "callbackUrl":          callback_url,
+        "returnUrl":            return_url,
+        "language":             "ar",
+    }
+
+    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/session"
+
+    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}, url={url}")
 
     try:
-        order_id     = f"mullak_{user['user_id']}_{int(time.time())}"
-        callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
-        return_url   = MINI_APP_URL.rstrip("/") + "?payment=done"
-
-        payload = {
-            "amount":        PLAN_MONTHLY_AMOUNT,
-            "currency":      "SAR",
-            "merchantRefId": order_id,
-            "callbackUrl":   callback_url,
-            "returnUrl":     return_url,
-            "description":   "اشتراك مُلّاك الشهري",
-            "language":      "ar",
-            "customerEmail": f"user_{user['user_id']}@mullak.app",
-        }
-
-        print(f"📤 إرسال طلب Geidea: order={order_id}, amount={PLAN_MONTHLY_AMOUNT}")
-        print(f"    URL: {GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session")
-        print(f"    callbackUrl: {callback_url}")
-
         resp = requests.post(
-            f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session",
+            url,
             json=payload,
-            auth=(GEIDEA_GATEWAY_KEY, GEIDEA_API_PASSWORD),
-            timeout=20,
-            headers={"Content-Type": "application/json", "Accept": "application/json"}
+            auth=geidea_auth(),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=20
         )
 
-        print(f"📩 رد Geidea: status={resp.status_code}")
+        print(f"📩 Geidea response: status={resp.status_code}")
 
-        # ✅ محاولة قراءة الرد دائماً
         try:
             resp_data = resp.json()
         except Exception:
-            resp_data = {"raw": resp.text[:500]}
+            resp_data = {"raw": resp.text[:1000]}
 
-        print(f"    body={json.dumps(resp_data, ensure_ascii=False)[:300]}")
+        print(f"    body={json.dumps(resp_data, ensure_ascii=False)[:400]}")
 
         if not resp.ok:
-            # ✅ إرجاع رسالة خطأ تفصيلية للمطوّر
             error_msg = (
                 resp_data.get("responseMessage") or
                 resp_data.get("message") or
@@ -765,47 +799,38 @@ def create_checkout(user):
                 f"خطأ {resp.status_code} من بوابة الدفع"
             )
             return jsonify({
-                "error": error_msg,
-                "geidea_code": resp.status_code,
-                "details": resp_data
+                "error":       error_msg,
+                "status_code": resp.status_code,
+                "details":     resp_data
             }), 502
 
-        # ✅ استخراج رابط الدفع — جرّب مسارات متعددة
-        payment_url = (
-            resp_data.get("paymentUrl") or
-            resp_data.get("session", {}).get("paymentUrl") or
-            resp_data.get("redirectUrl") or
-            resp_data.get("checkoutUrl") or
-            ""
-        )
-
+        payment_url = extract_checkout_url(resp_data)
         if not payment_url:
             print(f"❌ لم يُعثر على paymentUrl في: {resp_data}")
             return jsonify({
-                "error": "لم يرجع Geidea رابط الدفع — تحقق من إعدادات الحساب",
+                "error":    "لم يرجع Geidea رابط الدفع — تحقق من إعدادات الحساب",
                 "response": resp_data
             }), 502
 
-        # ✅ حفظ الطلب في Supabase (اختياري — يستمر لو فشل)
+        # حفظ الطلب في Supabase (اختياري)
         try:
             sb_insert("payment_orders", {
-                "user_id":    user["user_id"],
-                "order_id":   order_id,
+                "user_id":    str(user["user_id"]),
+                "order_id":   merchant_ref,
                 "amount":     PLAN_MONTHLY_AMOUNT,
                 "status":     "pending",
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
         except Exception as e:
-            print(f"⚠️ payment_orders insert failed (non-critical): {e}")
+            print(f"⚠️ payment_orders insert (non-critical): {e}")
 
-        print(f"✅ رابط الدفع: {payment_url}")
-        return jsonify({"payment_url": payment_url, "order_id": order_id})
+        print(f"✅ payment_url: {payment_url}")
+        return jsonify({"payment_url": payment_url, "order_id": merchant_ref})
 
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ Connection error to Geidea: {e}")
-        return jsonify({"error": "تعذّر الاتصال ببوابة الدفع — حاول مرة أخرى"}), 502
     except requests.exceptions.Timeout:
         return jsonify({"error": "انتهت مهلة الاتصال ببوابة الدفع — حاول مرة أخرى"}), 502
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "تعذّر الاتصال ببوابة الدفع — حاول مرة أخرى"}), 502
     except Exception as e:
         print(f"❌ Checkout error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -813,54 +838,53 @@ def create_checkout(user):
 
 @app.route("/api/subscription/callback", methods=["POST"])
 def payment_callback():
-    """Geidea تستدعيه تلقائياً بعد الدفع"""
+    """Geidea تستدعيه تلقائياً بعد إتمام الدفع"""
     try:
         data = request.json or {}
-        print(f"📩 Geidea Callback received: {json.dumps(data, ensure_ascii=False)[:500]}")
+        print(f"📩 Geidea Callback: {json.dumps(data, ensure_ascii=False)[:800]}")
 
-        # ✅ Geidea ترسل الحالة بأشكال مختلفة — تحقق من الكل
+        # Geidea ترسل الحالة بأشكال مختلفة
         status = str(
             data.get("status") or
             data.get("responseCode") or
-            data.get("orderStatus") or
+            (data.get("order") or {}).get("status") or
             ""
         ).lower().strip()
 
-        ref_id = str(
+        # merchantReferenceId هو الاسم الجديد الصحيح
+        merchant_ref = str(
+            data.get("merchantReferenceId") or
             data.get("merchantRefId") or
-            data.get("detail", {}).get("merchantRefId") or
-            data.get("order", {}).get("merchantReferenceId") or
+            (data.get("order") or {}).get("merchantReferenceId") or
             ""
         ).strip()
 
-        print(f"    status={status!r}, ref_id={ref_id!r}")
+        print(f"    status={status!r}, ref={merchant_ref!r}")
 
-        # ✅ قبول نجاح Geidea بصيغتين: "success" أو "000"
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if status not in SUCCESS_CODES:
-            print(f"⚠️ حالة الدفع ليست نجاحاً: {status}")
-            return jsonify({"ok": False, "reason": f"status={status}"}), 200
+            print(f"⚠️ حالة الدفع ليست نجاحاً: {status!r}")
+            return jsonify({"ok": True, "processed": False, "status": status}), 200
 
-        if not ref_id.startswith("mullak_"):
-            print(f"⚠️ merchantRefId غير معروف: {ref_id}")
-            return jsonify({"ok": False, "reason": "unknown ref"}), 200
+        if not merchant_ref.startswith("mullak_"):
+            print(f"⚠️ merchantReferenceId غير معروف: {merchant_ref!r}")
+            return jsonify({"ok": True, "processed": False, "reason": "unknown ref"}), 200
 
-        parts   = ref_id.split("_")
-        user_id = parts[1] if len(parts) >= 2 else ""
+        parts   = merchant_ref.split("_")
+        user_id = parts[1] if len(parts) >= 3 else ""
         if not user_id:
-            return jsonify({"ok": False, "reason": "no user_id"}), 200
+            return jsonify({"ok": True, "processed": False, "reason": "no user_id"}), 200
 
         now_utc  = datetime.now(timezone.utc)
         existing = get_subscription(user_id)
 
-        # ✅ تجميع الأيام لو جدّد مبكراً
+        # تجميع الأيام لو جدّد مبكراً
+        base = now_utc
         if existing and existing.get("expires_at") and sub_is_active(user_id):
             try:
                 base = datetime.fromisoformat(existing["expires_at"].replace("Z", "+00:00"))
             except Exception:
                 base = now_utc
-        else:
-            base = now_utc
 
         new_expires = (base + timedelta(days=PLAN_MONTHLY_DAYS)).isoformat()
 
@@ -881,59 +905,62 @@ def payment_callback():
             })
 
         try:
-            sb_update("payment_orders", {"order_id": f"eq.{ref_id}"},
+            sb_update("payment_orders", {"order_id": f"eq.{merchant_ref}"},
                       {"status": "paid", "paid_at": now_utc.isoformat()})
         except Exception:
             pass
 
-        # ✅ إشعار Telegram للمستخدم
+        # إشعار Telegram للمستخدم
         try:
             if bot:
-                bot.send_message(int(user_id),
+                bot.send_message(
+                    int(user_id),
                     f"🎉 *تم تفعيل اشتراكك بنجاح!*\n\n"
-                    f"✅ الخطة الشهرية — 29 ريال\n"
+                    f"✅ الخطة الشهرية — {int(PLAN_MONTHLY_AMOUNT)} ريال\n"
                     f"📅 تنتهي في: {new_expires[:10]}\n\n"
                     f"استمتع بجميع مميزات مُلّاك 🏠",
-                    parse_mode="Markdown")
+                    parse_mode="Markdown"
+                )
         except Exception as e:
-            print(f"⚠️ Telegram notify failed: {e}")
+            print(f"⚠️ Telegram notify: {e}")
 
         print(f"✅ اشتراك مُفعَّل: user={user_id}, expires={new_expires}")
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "processed": True})
 
     except Exception as e:
-        print(f"❌ خطأ في Callback: {e}")
+        print(f"❌ Callback error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
-# ✅ نقطة إضافية — لو أراد المستخدم تأكيد الدفع يدوياً (بعد العودة من صفحة الدفع)
 @app.route("/api/subscription/verify/<order_id>", methods=["GET"])
 @require_auth
 def verify_payment(user, order_id):
-    """تحقق من حالة الطلب في Geidea مباشرة"""
+    """تحقق يدوي من حالة الطلب في Geidea (بعد العودة من صفحة الدفع)"""
     try:
-        if not GEIDEA_GATEWAY_KEY or not GEIDEA_API_PASSWORD:
+        if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
             return jsonify({"error": "بوابة الدفع غير مضبوطة"}), 500
 
         resp = requests.get(
-            f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/order",
-            params={"merchantRefId": order_id},
-            auth=(GEIDEA_GATEWAY_KEY, GEIDEA_API_PASSWORD),
-            timeout=15,
-            headers={"Accept": "application/json"}
+            f"{GEIDEA_BASE_URL}/payment-intent/api/v2/order",
+            params={"merchantReferenceId": order_id},
+            auth=geidea_auth(),
+            headers={"Accept": "application/json"},
+            timeout=15
         )
 
         if not resp.ok:
             return jsonify({"error": f"خطأ {resp.status_code}"}), 502
 
         data = resp.json()
-        order_status = str(data.get("status") or data.get("orderStatus") or "").lower()
+        order_status = str(
+            data.get("status") or
+            (data.get("order") or {}).get("status") or ""
+        ).lower()
 
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if order_status in SUCCESS_CODES:
-            # تفعيل الاشتراك يدوياً
-            uid     = user["user_id"]
-            now_utc = datetime.now(timezone.utc)
+            uid      = user["user_id"]
+            now_utc  = datetime.now(timezone.utc)
             existing = get_subscription(uid)
             base     = now_utc
             if existing and existing.get("expires_at") and sub_is_active(uid):
@@ -1227,6 +1254,8 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 تشغيل على المنفذ {port}")
-    print(f"   Geidea: {'✅' if GEIDEA_GATEWAY_KEY else '❌ غير مضبوط'}")
-    print(f"   Railway URL: {RAILWAY_URL or '❌ غير مضبوط'}")
+    print(f"   Geidea Public Key: {'✅' if GEIDEA_PUBLIC_KEY  else '❌ غير مضبوط'}")
+    print(f"   Geidea API Pass:   {'✅' if GEIDEA_API_PASSWORD else '❌ غير مضبوط'}")
+    print(f"   Geidea Base URL:   {GEIDEA_BASE_URL}")
+    print(f"   Railway URL:       {RAILWAY_URL or '❌ غير مضبوط'}")
     app.run(host="0.0.0.0", port=port)
