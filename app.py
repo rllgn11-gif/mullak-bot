@@ -694,6 +694,12 @@ def test_geidea():
         "signature":           signature,
         "customer": {
             "name": "مُلّاك"
+        },
+        "order": {
+            "statementDescriptor": {
+                "name":  "مُلّاك",
+                "phone": ""
+            }
         }
     }
 
@@ -766,6 +772,12 @@ def create_checkout(user):
         "signature":           signature,
         "customer": {
             "name": "مُلّاك"
+        },
+        "order": {
+            "statementDescriptor": {
+                "name":  "مُلّاك",
+                "phone": ""
+            }
         }
     }
 
