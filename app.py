@@ -697,7 +697,7 @@ def test_geidea():
         },
         "order": {
             "statementDescriptor": {
-                "name":  "مُلّاك",
+                "name":  "ملاك",
                 "phone": ""
             }
         }
@@ -775,7 +775,7 @@ def create_checkout(user):
         },
         "order": {
             "statementDescriptor": {
-                "name":  "مُلّاك",
+                "name":  "ملاك",
                 "phone": ""
             }
         }
