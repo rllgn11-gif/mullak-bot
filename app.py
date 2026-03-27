@@ -34,7 +34,6 @@ RAILWAY_URL  = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip().rstrip("/")
 GEIDEA_PUBLIC_KEY   = os.environ.get("GEIDEA_PUBLIC_KEY", "").strip()
 GEIDEA_API_PASSWORD = os.environ.get("GEIDEA_API_PASSWORD", "").strip()
 GEIDEA_BASE_URL     = os.environ.get("GEIDEA_BASE_URL", "https://api.ksamerchant.geidea.net").strip().rstrip("/")
-# HPP = Hosted Payment Page — الصفحة التي يدفع منها المستخدم
 GEIDEA_HPP_BASE     = os.environ.get("GEIDEA_HPP_BASE", "https://www.ksamerchant.geidea.net/hpp/checkout/")
 
 # 💰 الاشتراك
@@ -210,7 +209,6 @@ def sub_days_left(user_id: str):
         return 0
 
 def require_write(f):
-    """يمنع الإضافة/التعديل/الحذف عند انتهاء الاشتراك"""
     @wraps(f)
     def decorated(user, *args, **kwargs):
         if not sub_is_active(user["user_id"]):
@@ -225,11 +223,6 @@ def geidea_auth():
     return (GEIDEA_PUBLIC_KEY, GEIDEA_API_PASSWORD)
 
 def geidea_signature(amount: float, currency: str, merchant_ref: str, timestamp: str) -> str:
-    """
-    HMAC-SHA256: MerchantPublicKey + amount + currency + merchantRefId + timestamp
-    مفتاح التشفير: GEIDEA_API_PASSWORD
-    الناتج: Base64
-    """
     msg = f"{GEIDEA_PUBLIC_KEY}{amount:.2f}{currency}{merchant_ref}{timestamp}"
     sig = hmac.new(
         GEIDEA_API_PASSWORD.encode("utf-8"),
@@ -239,15 +232,8 @@ def geidea_signature(amount: float, currency: str, merchant_ref: str, timestamp:
     return base64.b64encode(sig).decode("utf-8")
 
 def extract_checkout_url(resp_data: dict) -> str:
-    """
-    ✅ الإصلاح الرئيسي:
-    Geidea KSA تعيد session.id فقط بدون paymentUrl.
-    نبني رابط HPP مباشرة من session.id.
-    """
     if not isinstance(resp_data, dict):
         return ""
-
-    # جرّب أي رابط مباشر أولاً (للتوافق مع بيئات أخرى)
     candidates = [
         resp_data.get("paymentUrl"),
         resp_data.get("redirectUrl"),
@@ -259,15 +245,10 @@ def extract_checkout_url(resp_data: dict) -> str:
     for url in candidates:
         if isinstance(url, str) and url.strip():
             return url.strip()
-
-    # ✅ الحل الصحيح لـ Geidea KSA:
-    # بعد إنشاء الجلسة بنجاح (responseCode=000)،
-    # ترجع session.id → نبني HPP URL
     session_id = (resp_data.get("session") or {}).get("id")
     if session_id:
         hpp_base = GEIDEA_HPP_BASE.rstrip("/")
         return f"{hpp_base}/?{session_id}"
-
     return ""
 
 # ============================================================
@@ -711,16 +692,26 @@ def test_geidea():
         "returnUrl":           return_url,
         "language":            "ar",
         "signature":           signature,
+        "customer": {
+            "name": "مُلّاك"
+        }
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
 
     try:
-        resp = requests.post(url, json=payload, auth=geidea_auth(),
+        resp = requests.post(
+            url,
+            json=payload,
+            auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
-            timeout=20)
-        try:    body = resp.json()
-        except: body = {"raw": resp.text[:1000]}
+            timeout=20
+        )
+
+        try:
+            body = resp.json()
+        except Exception:
+            body = {"raw": resp.text[:1000]}
 
         checkout_url = extract_checkout_url(body)
 
@@ -729,7 +720,7 @@ def test_geidea():
             "status_code":  resp.status_code,
             "request_url":  url,
             "response":     body,
-            "checkout_url": checkout_url,   # ✅ يجب أن يكون موجوداً الآن
+            "checkout_url": checkout_url,
             "hpp_base":     GEIDEA_HPP_BASE,
             "config": {
                 "geidea_base_url": GEIDEA_BASE_URL,
@@ -773,25 +764,36 @@ def create_checkout(user):
         "returnUrl":           return_url,
         "language":            "ar",
         "signature":           signature,
+        "customer": {
+            "name": "مُلّاك"
+        }
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
     print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}")
 
     try:
-        resp = requests.post(url, json=payload, auth=geidea_auth(),
+        resp = requests.post(
+            url,
+            json=payload,
+            auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
-            timeout=20)
+            timeout=20
+        )
 
-        try:    resp_data = resp.json()
-        except: resp_data = {"raw": resp.text[:1000]}
+        try:
+            resp_data = resp.json()
+        except Exception:
+            resp_data = {"raw": resp.text[:1000]}
 
         print(f"📩 Geidea: status={resp.status_code}, body={json.dumps(resp_data, ensure_ascii=False)[:300]}")
 
         if not resp.ok:
-            error_msg = (resp_data.get("responseMessage") or
-                         resp_data.get("message") or
-                         f"خطأ {resp.status_code} من بوابة الدفع")
+            error_msg = (
+                resp_data.get("responseMessage") or
+                resp_data.get("message") or
+                f"خطأ {resp.status_code} من بوابة الدفع"
+            )
             return jsonify({"error": error_msg, "details": resp_data}), 502
 
         payment_url = extract_checkout_url(resp_data)
@@ -801,7 +803,6 @@ def create_checkout(user):
                 "response": resp_data
             }), 502
 
-        # حفظ اختياري في Supabase
         try:
             sb_insert("payment_orders", {
                 "user_id":    str(user["user_id"]),
@@ -908,7 +909,6 @@ def payment_callback():
 @app.route("/api/subscription/verify/<order_id>", methods=["GET"])
 @require_auth
 def verify_payment(user, order_id):
-    """تحقق يدوي من حالة الدفع (تُستدعى بعد عودة المستخدم من صفحة الدفع)"""
     try:
         if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
             return jsonify({"error": "بوابة الدفع غير مضبوطة"}), 500
