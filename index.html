@@ -569,7 +569,22 @@ async function init() {
   try {
     const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
     await login();
-    setTimeout(() => { updateSubBanner(); goTo('home'); }, 1400);
+
+    // ✅ تحقق لو المستخدم رجع من صفحة الدفع
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentDone = urlParams.get('payment');
+    const orderId = urlParams.get('order_id');
+
+    if (paymentDone === 'done') {
+      setTimeout(() => {
+        updateSubBanner();
+        goTo('subscription');
+        // انتظر قليلاً ثم حمّل حالة الاشتراك المحدثة
+        setTimeout(() => loadSubscription(), 1500);
+      }, 1400);
+    } else {
+      setTimeout(() => { updateSubBanner(); goTo('home'); }, 1400);
+    }
   } catch(e) {
     console.error('Login failed:', e.message);
   }
@@ -1053,14 +1068,20 @@ async function loadSubscription() {
 
 async function startCheckout() {
   const btn = document.getElementById('payBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري التحضير...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير... <span class="spinner"></span>'; }
   try {
     const d = await api('POST', '/api/subscription/checkout');
     if (d.payment_url) {
-      window.open(d.payment_url, '_blank');
-      toast('✅ تم فتح صفحة الدفع', 'success');
-      // إعادة تحميل الحالة بعد 5 ثوانٍ
-      setTimeout(() => loadSubscription(), 5000);
+      // ✅ الطريقة الصحيحة داخل Telegram Mini App
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && tg.openLink) {
+        tg.openLink(d.payment_url);
+      } else {
+        window.open(d.payment_url, '_blank');
+      }
+      toast('✅ تم فتح صفحة الدفع — أكمل الدفع ثم ارجع هنا', 'success');
+      // إعادة تحميل الحالة بعد 8 ثوانٍ (وقت كافٍ للدفع)
+      setTimeout(() => loadSubscription(), 8000);
     } else {
       toast('❌ فشل إنشاء رابط الدفع', 'error');
     }
@@ -1068,6 +1089,25 @@ async function startCheckout() {
     toast('❌ ' + e.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '💳 اشترك الآن — 29 ريال/شهر'; }
+  }
+}
+
+// ✅ التحقق اليدوي بعد العودة من صفحة الدفع
+async function verifyAfterPayment(orderId) {
+  try {
+    toast('🔄 جاري التحقق من الدفع...', 'success');
+    const d = await api('GET', '/api/subscription/verify/' + orderId);
+    if (d.paid) {
+      subData.status  = 'active';
+      subData.active  = true;
+      updateSubBanner();
+      toast('🎉 تم تفعيل اشتراكك بنجاح!', 'success');
+      setTimeout(() => loadSubscription(), 1000);
+    } else {
+      toast('⏳ لم يتم تأكيد الدفع بعد — انتظر قليلاً', 'error');
+    }
+  } catch(e) {
+    console.log('verify error:', e.message);
   }
 }
 
