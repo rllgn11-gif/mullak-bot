@@ -693,13 +693,7 @@ def test_geidea():
         "language":            "ar",
         "signature":           signature,
         "customer": {
-            "name": "مُلّاك"
-        },
-        "order": {
-            "statementDescriptor": {
-                "name":  "ملاك",
-                "phone": ""
-            }
+            "name": "ملاك"
         }
     }
 
@@ -757,32 +751,50 @@ def create_checkout(user):
 
     merchant_ref = f"mullak_{user['user_id']}_{int(time.time())}"
     callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
-    return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
-    timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+    expiry_date  = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
 
     payload = {
-        "amount":              PLAN_MONTHLY_AMOUNT,
-        "currency":            "SAR",
-        "timestamp":           timestamp,
-        "merchantReferenceId": merchant_ref,
-        "callbackUrl":         callback_url,
-        "returnUrl":           return_url,
-        "language":            "ar",
-        "signature":           signature,
+        "amount":   PLAN_MONTHLY_AMOUNT,
+        "currency": "SAR",
         "customer": {
-            "name": "مُلّاك"
+            "name": "مشترك"
         },
-        "order": {
-            "statementDescriptor": {
-                "name":  "ملاك",
-                "phone": ""
-            }
-        }
+        "eInvoiceDetails": {
+            "subtotal":             PLAN_MONTHLY_AMOUNT,
+            "grandTotal":           PLAN_MONTHLY_AMOUNT,
+            "subtotalWithoutTax":   PLAN_MONTHLY_AMOUNT,
+            "subtotalTax":          0,
+            "extraChargesType":     "Amount",
+            "invoiceDiscountType":  "Amount",
+            "language":             "ar",
+            "merchantReferenceId":  merchant_ref,
+            "callbackurl":          callback_url,
+            "type":                 "Detailed",
+            "preAuthorizeAmount":   False,
+            "collectCustomersBillingShippingAddress": False,
+            "eInvoiceItems": [
+                {
+                    "description": "اشتراك مُلّاك الشهري",
+                    "price":       PLAN_MONTHLY_AMOUNT,
+                    "quantity":    1,
+                    "total":       PLAN_MONTHLY_AMOUNT,
+                    "totalWithoutTax": PLAN_MONTHLY_AMOUNT,
+                    "totalTax":    0,
+                    "itemDiscountType": "Amount",
+                    "taxType":     "Amount",
+                    "priceWithDiscount": PLAN_MONTHLY_AMOUNT,
+                    "priceTax":    0,
+                    "priceTotal":  PLAN_MONTHLY_AMOUNT,
+                    "itemDiscount": 0,
+                    "tax":         0
+                }
+            ]
+        },
+        "expiryDate": expiry_date
     }
 
-    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
-    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}")
+    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v1/direct/eInvoice"
+    print(f"📤 Geidea Pay-by-Link: user={user['user_id']}, ref={merchant_ref}")
 
     try:
         resp = requests.post(
@@ -808,7 +820,8 @@ def create_checkout(user):
             )
             return jsonify({"error": error_msg, "details": resp_data}), 502
 
-        payment_url = extract_checkout_url(resp_data)
+        # Pay by Link يرجع الرابط في paymentIntent.link
+        payment_url = (resp_data.get("paymentIntent") or {}).get("link", "")
         if not payment_url:
             return jsonify({
                 "error":    "لم يُعثر على رابط الدفع في رد Geidea",
