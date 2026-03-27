@@ -33,10 +33,11 @@ RAILWAY_URL  = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip().rstrip("/")
 GEIDEA_PUBLIC_KEY   = os.environ.get("GEIDEA_PUBLIC_KEY", "").strip()
 GEIDEA_API_PASSWORD = os.environ.get("GEIDEA_API_PASSWORD", "").strip()
 
-# Geidea Base URL
-# Sandbox:    https://api.uat.merchant.geidea.net
-# Production: https://api.merchant.geidea.net
-GEIDEA_BASE_URL = os.environ.get("GEIDEA_BASE_URL", "https://api.uat.merchant.geidea.net").strip().rstrip("/")
+# Geidea Base URL — KSA Production / Sandbox
+# KSA Production: https://api.ksamerchant.geidea.net
+# KSA Sandbox:    https://api.uat.ksamerchant.geidea.net  (إن وُجدت)
+# Global:         https://api.merchant.geidea.net
+GEIDEA_BASE_URL = os.environ.get("GEIDEA_BASE_URL", "https://api.ksamerchant.geidea.net").strip().rstrip("/")
 
 # 💰 خطة الاشتراك
 PLAN_MONTHLY_AMOUNT = float(os.environ.get("PLAN_MONTHLY_AMOUNT", "29"))
@@ -632,6 +633,22 @@ def geidea_auth():
     """Basic auth لـ Geidea: public key ككلمة مستخدم، API password ككلمة مرور"""
     return (GEIDEA_PUBLIC_KEY, GEIDEA_API_PASSWORD)
 
+def geidea_signature(amount: float, currency: str, merchant_ref: str, timestamp: str) -> str:
+    """
+    Geidea تطلب signature لبعض البيئات.
+    الصيغة: HMAC-SHA256( MerchantPublicKey + amount + currency + merchantReferenceId + timestamp )
+    المفتاح: GEIDEA_API_PASSWORD
+    الناتج:  Base64
+    """
+    import base64
+    msg = f"{GEIDEA_PUBLIC_KEY}{amount:.2f}{currency}{merchant_ref}{timestamp}"
+    sig = hmac.new(
+        GEIDEA_API_PASSWORD.encode("utf-8"),
+        msg.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    return base64.b64encode(sig).decode("utf-8")
+
 def extract_checkout_url(resp_data: dict) -> str:
     """استخراج رابط صفحة الدفع من رد Geidea — يجرّب أكثر من مسار"""
     if not isinstance(resp_data, dict):
@@ -694,17 +711,21 @@ def test_geidea():
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
     merchant_ref = f"test_{int(time.time())}"
 
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+    signature = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+
     payload = {
         "amount":               PLAN_MONTHLY_AMOUNT,
         "currency":             "SAR",
-        "timestamp":            datetime.now(timezone.utc).isoformat(),
+        "timestamp":            timestamp,
         "merchantReferenceId":  merchant_ref,
         "callbackUrl":          callback_url,
         "returnUrl":            return_url,
         "language":             "ar",
+        "signature":            signature,
     }
 
-    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/session"
+    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
 
     try:
         resp = requests.post(
@@ -758,18 +779,21 @@ def create_checkout(user):
     merchant_ref = f"mullak_{user['user_id']}_{int(time.time())}"
     callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
+    timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
 
     payload = {
         "amount":               PLAN_MONTHLY_AMOUNT,
         "currency":             "SAR",
-        "timestamp":            datetime.now(timezone.utc).isoformat(),
+        "timestamp":            timestamp,
         "merchantReferenceId":  merchant_ref,
         "callbackUrl":          callback_url,
         "returnUrl":            return_url,
         "language":             "ar",
+        "signature":            signature,
     }
 
-    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/session"
+    url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
 
     print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}, url={url}")
 
