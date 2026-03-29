@@ -846,11 +846,12 @@ def subscription_status(user):
         active = sub_is_active(user["user_id"])
         days   = sub_days_left(user["user_id"])
         return jsonify({
-            "status":     sub.get("status", "none"),
-            "plan":       sub.get("plan", ""),
-            "active":     active,
-            "expires_at": sub.get("expires_at", ""),
-            "days_left":  days,
+            "status":      sub.get("status", "none"),
+            "plan":        sub.get("plan", ""),
+            "active":      active,
+            "expires_at":  sub.get("expires_at", ""),
+            "days_left":   days,
+            "final_price": get_final_price(),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
