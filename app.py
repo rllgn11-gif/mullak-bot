@@ -47,7 +47,7 @@ GEIDEA_HPP_BASE     = os.environ.get("GEIDEA_HPP_BASE", "https://www.ksamerchant
 # 💰 الاشتراك
 PLAN_MONTHLY_AMOUNT = float(os.environ.get("PLAN_MONTHLY_AMOUNT", "29"))
 PLAN_MONTHLY_DAYS   = 30
-TRIAL_DAYS          = 7
+TRIAL_DAYS          = 30
 
 # ✅ FIX #9: Webhook Secret منفصل عن Bot Token
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", hashlib.sha256((BOT_TOKEN or "fallback").encode()).hexdigest()[:32])
@@ -275,7 +275,18 @@ def get_subscription(user_id: str):
     except Exception:
         return None
 
+def is_free_mode():
+    """تحقق هل الوضع المجاني مفعّل"""
+    try:
+        val = get_setting("free_mode", "on")
+        return str(val).lower() in ("on", "true", "1", "yes")
+    except Exception:
+        return True  # مجاني بالافتراضي
+
 def sub_is_active(user_id: str):
+    # إذا الوضع المجاني مفعّل، الكل يدخل مجاناً
+    if is_free_mode():
+        return True
     sub = get_subscription(user_id)
     if not sub or not sub.get("expires_at"):
         return False
@@ -460,6 +471,7 @@ def auth():
 
     sub_status, sub_expires, sub_days = "none", None, 0
     try:
+        free = is_free_mode()
         existing_sub = get_subscription(user_id)
         if not existing_sub:
             trial_exp = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
@@ -470,11 +482,13 @@ def auth():
                 "expires_at": trial_exp,
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
-            sub_status, sub_expires, sub_days = "trial", trial_exp, TRIAL_DAYS
+            sub_status  = "free" if free else "trial"
+            sub_expires = trial_exp
+            sub_days    = 999 if free else TRIAL_DAYS
         else:
-            sub_status  = existing_sub.get("status", "none")
+            sub_status  = "free" if free else existing_sub.get("status", "none")
             sub_expires = existing_sub.get("expires_at")
-            sub_days    = sub_days_left(user_id)
+            sub_days    = 999 if free else sub_days_left(user_id)
     except Exception as e:
         print(f"Sub init error: {e}")
 
@@ -493,7 +507,7 @@ def auth():
 def health():
     return jsonify({
         "status":             "ok",
-        "app":                "مُلّاك 🏠",
+        "app":                "إدارة العقارات 🏠",
         "geidea_configured":  bool(GEIDEA_PUBLIC_KEY and GEIDEA_API_PASSWORD),
     })
 
@@ -627,7 +641,36 @@ def get_units(user):
         filters = {"user_id": f"eq.{user['user_id']}"}
         prop_id = request.args.get("property_id")
         if prop_id: filters["property_id"] = f"eq.{prop_id}"
-        return jsonify(sb_select("units", filters))
+        units = sb_select("units", filters)
+
+        # إضافة معلومات انتهاء العقد لكل وحدة
+        if prop_id:
+            tenants = sb_select("tenants", {
+                "user_id": f"eq.{user['user_id']}",
+                "property_id": f"eq.{prop_id}"
+            }, select="unit_num,name,end_date,checkout_time")
+            tenant_map = {}
+            for t in tenants:
+                tenant_map[t.get("unit_num")] = t
+
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            now_hour = datetime.now(timezone.utc).hour
+            for u in units:
+                t_info = tenant_map.get(u.get("unit_num"))
+                if t_info and t_info.get("end_date"):
+                    end_date = t_info["end_date"]
+                    co_time = t_info.get("checkout_time", "14:00")
+                    try:
+                        co_hour = int(co_time.split(":")[0])
+                    except Exception:
+                        co_hour = 14
+                    # إذا انتهى العقد، الوحدة متاحة
+                    if now_str > end_date or (now_str == end_date and now_hour >= co_hour):
+                        u["tenant_name"] = None
+                        u["expired"] = True
+                u["tenant_end_date"] = t_info["end_date"] if t_info else None
+
+        return jsonify(units)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -710,6 +753,7 @@ def add_tenant(user):
             "period":       d.get("period", "شهر"),
             "period_count": d.get("period_count", 1),
             "period_label": d.get("period_label", ""),
+            "checkout_time": d.get("checkout_time", "14:00"),
             "paid":         False
         }
         if d.get("start_date"): row["start_date"] = d["start_date"]
@@ -731,7 +775,7 @@ def edit_tenant(user, tenant_id):
     try:
         d       = request.json or {}
         allowed = ["name", "phone", "rent", "period", "period_count",
-                   "period_label", "start_date", "end_date", "paid"]
+                   "period_label", "start_date", "end_date", "checkout_time", "paid"]
         updates = {k: d[k] for k in allowed if k in d}
         result  = sb_update("tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"}, updates)
@@ -872,18 +916,26 @@ def get_stats(user):
 @require_auth
 def subscription_status(user):
     try:
+        free = is_free_mode()
         sub = get_subscription(user["user_id"])
         if not sub:
-            return jsonify({"status": "none", "active": False, "days_left": 0})
+            return jsonify({
+                "status": "free" if free else "none",
+                "active": free,
+                "days_left": 999 if free else 0,
+                "free_mode": free,
+                "final_price": get_final_price(),
+            })
         active = sub_is_active(user["user_id"])
         days   = sub_days_left(user["user_id"])
         return jsonify({
-            "status":      sub.get("status", "none"),
+            "status":      "free" if free else sub.get("status", "none"),
             "plan":        sub.get("plan", ""),
             "active":      active,
             "expires_at":  sub.get("expires_at", ""),
-            "days_left":   days,
+            "days_left":   999 if free else days,
             "final_price": get_final_price(),
+            "free_mode":   free,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1067,7 +1119,7 @@ def payment_callback():
                     f"🎉 *تم تفعيل اشتراكك بنجاح!*\n\n"
                     f"✅ الخطة الشهرية — {int(get_final_price())} ريال\n"
                     f"📅 تنتهي في: {new_expires[:10]}\n\n"
-                    f"استمتع بجميع مميزات مُلّاك 🏠",
+                    f"استمتع بجميع مميزات إدارة العقارات 🏠",
                     parse_mode="Markdown")
         except Exception as e:
             print(f"⚠️ Telegram notify: {e}")
@@ -1180,7 +1232,7 @@ def print_report(user):
 
         html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-<title>تقرير مُلّاك — {today}</title>
+<title>تقرير إدارة العقارات — {today}</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a2e;direction:rtl;font-size:13px}}
@@ -1200,7 +1252,7 @@ tr:nth-child(even) td{{background:#f8fafc}}
 @media print{{body{{font-size:11px}}}}
 </style></head><body>
 <div class="header">
-  <div><div class="logo">مُلّ<span>اك</span></div><div style="font-size:13px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
+  <div><div class="logo">إدارة <span>العقارات</span></div><div style="font-size:13px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
   <div style="text-align:left;font-size:12px;opacity:.8">
     <div style="font-size:14px;font-weight:700;margin-bottom:4px">التقرير المالي الشامل</div>
     <div>المستخدم: {fname}</div><div>التاريخ: {today}</div>
@@ -1224,7 +1276,7 @@ tr:nth-child(even) td{{background:#f8fafc}}
 <table><tr><th>التصنيف</th><th>الوصف</th><th>العقار</th><th>المبلغ</th></tr>
 {expenses_rows or '<tr><td colspan="4" style="text-align:center;color:#64748b">لا توجد مصروفات</td></tr>'}
 <tr style="background:#fef3c7;font-weight:800"><td colspan="3" style="text-align:center">إجمالي المصروفات</td><td style="color:#ef4444">{fmt(total_e)} ريال</td></tr></table></div>
-<div class="footer">تم إنشاء هذا التقرير بواسطة نظام مُلّاك — {today}</div>
+<div class="footer">تم إنشاء هذا التقرير بواسطة نظام إدارة العقارات — {today}</div>
 <script>window.onload=function(){{window.print()}}</script>
 </body></html>"""
 
@@ -1235,6 +1287,42 @@ tr:nth-child(even) td{{background:#f8fafc}}
 # ============================================================
 # 🔔 التذكيرات اليومية
 # ============================================================
+def auto_checkout_expired_tenants():
+    """تحرير الوحدات عند انتهاء عقد المستأجر تلقائياً"""
+    if not SUPABASE_URL:
+        return
+    print("🔄 فحص العقود المنتهية...")
+    try:
+        now_utc = datetime.now(timezone.utc)
+        today_str = now_utc.strftime("%Y-%m-%d")
+        current_hour = now_utc.hour
+
+        all_tenants = sb_select("tenants", select="*")
+        for t in all_tenants:
+            end_date = t.get("end_date")
+            if not end_date:
+                continue
+            checkout_time = t.get("checkout_time", "14:00")
+            try:
+                checkout_hour = int(checkout_time.split(":")[0])
+            except Exception:
+                checkout_hour = 14
+
+            # تحقق هل تجاوزنا تاريخ ووقت الخروج
+            if today_str > end_date or (today_str == end_date and current_hour >= checkout_hour):
+                # تحرير الوحدة
+                try:
+                    sb_update("units",
+                        {"property_id": f"eq.{t['property_id']}",
+                         "unit_num":    f"eq.{t['unit_num']}",
+                         "user_id":     f"eq.{t['user_id']}"},
+                        {"tenant_name": None})
+                    print(f"  ✅ تم تحرير وحدة {t['unit_num']} — {t['name']} (انتهى {end_date} @ {checkout_time})")
+                except Exception as e:
+                    print(f"  ⚠️ تحرير وحدة: {e}")
+    except Exception as e:
+        print(f"❌ auto_checkout: {e}")
+
 def send_daily_reminders():
     if not BOT_TOKEN or not SUPABASE_URL:
         return
@@ -1256,7 +1344,7 @@ def send_daily_reminders():
                 lines.append(f"• *{t['name']}* — {prop} — وحدة {t.get('unit_num','')} — {int(t.get('rent',0)):,} ريال")
             if len(unpaid) > 10:
                 lines.append(f"_... و {len(unpaid)-10} آخرين_")
-            msg  = f"🔔 *تذكير يومي — مُلّاك*\n\n"
+            msg  = f"🔔 *تذكير يومي — إدارة العقارات*\n\n"
             msg += f"لديك *{len(unpaid)}* مستأجر لم يدفع:\n\n"
             msg += "\n".join(lines)
             msg += f"\n\n💰 *إجمالي المتأخر: {total:,} ريال*"
@@ -1276,7 +1364,7 @@ def send_daily_reminders():
 def app_keyboard():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(
-        text="🏠 فتح تطبيق مُلّاك",
+        text="🏠 فتح تطبيق إدارة العقارات",
         web_app=WebAppInfo(url=MINI_APP_URL)
     ))
     return markup
@@ -1293,7 +1381,7 @@ if bot:
     def start(msg):
         name = msg.from_user.first_name
         bot.send_message(msg.chat.id,
-            f"🏠 *أهلاً {name} في مُلّاك!*\n\nنظام إدارة عقاراتك الذكي 🤖\n\nاضغط الزر أدناه لفتح التطبيق 👇",
+            f"🏠 *أهلاً {name} في إدارة العقارات!*\n\nنظام إدارة عقاراتك الذكي 🤖\n\nاضغط الزر أدناه لفتح التطبيق 👇",
             parse_mode="Markdown", reply_markup=app_keyboard())
 
     @bot.message_handler(commands=["stats"])
@@ -1328,7 +1416,7 @@ if bot:
             elif pct(lt1) >= 60: rating = "⚠️ أغلب المستخدمين يخرجون سريعاً — راجع تجربة المستخدم"
             else:                rating = "✅ التطبيق يعمل بشكل جيد"
             text = (
-                f"📊 *إحصائيات مُلّاك*\n━━━━━━━━━━━━━━━━━\n"
+                f"📊 *إحصائيات إدارة العقارات*\n━━━━━━━━━━━━━━━━━\n"
                 f"👥 المستخدمون: `{total_users}` | 📱 الجلسات: `{total_sessions}`\n"
                 f"🔁 الراجعون: `{returning}` ({pct_ret}%)\n"
                 f"⏱️ متوسط الاستخدام: `{avg_sec//60}:{avg_sec%60:02d}` دقيقة\n━━━━━━━━━━━━━━━━━\n"
@@ -1415,6 +1503,48 @@ if bot:
         except Exception as e:
             bot.reply_to(msg, f"❌ خطأ: {e}")
 
+    # ============================================================
+    # 🆓 أوامر المدير — الوضع المجاني
+    # ============================================================
+    @bot.message_handler(commands=["free_on"])
+    def free_on_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("free_mode", "on")
+            bot.reply_to(msg,
+                "✅ *تم تفعيل الوضع المجاني*\n\n"
+                "🆓 جميع المستخدمين يمكنهم استخدام التطبيق مجاناً\n"
+                "📌 لإيقافه: /free_off",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["free_off"])
+    def free_off_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("free_mode", "off")
+            bot.reply_to(msg,
+                "🔒 *تم إيقاف الوضع المجاني*\n\n"
+                "💳 المستخدمون يحتاجون اشتراك فعّال للكتابة\n"
+                "📌 لتفعيله: /free_on",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["free_status"])
+    def free_status_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        status = "🆓 مفعّل" if is_free_mode() else "🔒 متوقف"
+        bot.reply_to(msg,
+            f"📌 *حالة الوضع المجاني:* {status}\n\n"
+            f"• /free\\_on — تفعيل المجاني\n"
+            f"• /free\\_off — إيقاف المجاني",
+            parse_mode="Markdown")
+
     @bot.message_handler(func=lambda m: not (m.text or "").startswith("/"))
     def default(msg):
         bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
@@ -1437,8 +1567,9 @@ if __name__ == "__main__":
     if BOT_TOKEN:
         scheduler = BackgroundScheduler(timezone="UTC")
         scheduler.add_job(send_daily_reminders, "cron", hour=6, minute=0, id="daily")
+        scheduler.add_job(auto_checkout_expired_tenants, "cron", minute="*/30", id="auto_checkout")
         scheduler.start()
-        print("✅ جدولة التذكيرات اليومية تعمل")
+        print("✅ جدولة التذكيرات اليومية + الخروج التلقائي تعمل")
 
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 تشغيل على المنفذ {port}")

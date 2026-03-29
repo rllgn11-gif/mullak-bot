@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>مُلّاك</title>
+<title>إدارة العقارات</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -205,7 +205,7 @@
 
 <div class="screen active" id="splash">
   <div class="success-screen">
-    <div class="splash-logo">مُلّ<span>اك</span></div>
+    <div class="splash-logo">إدارة <span>العقارات</span></div>
     <div class="splash-sub">نظام إدارة العقارات الذكي</div>
   </div>
 </div>
@@ -213,7 +213,7 @@
 <div class="screen" id="home">
   <div class="home-header">
     <div class="home-greeting">مرحباً بك 👋</div>
-    <div class="home-name" id="userName">مُلّاك</div>
+    <div class="home-name" id="userName">إدارة العقارات</div>
   </div>
   <div class="stats-container">
     <div class="stats-row two">
@@ -321,6 +321,13 @@
     <div class="form-group"><label class="form-label" id="tenantCountLabel">عدد الأيام</label><input class="form-input" id="tenantCount" placeholder="مثال: 3" type="number" min="1" value="1" oninput="calcEndDate()"></div>
     <div class="form-group"><label class="form-label">تاريخ بداية العقد</label><input class="form-input" id="tenantStartDate" type="date" oninput="calcEndDate()"></div>
     <div class="form-group" id="endDateBox" style="display:none;"><div class="note-box green"><div class="note-title">📅 تاريخ انتهاء العقد</div><div class="note-text" id="endDateDisplay">—</div></div></div>
+    <div class="form-group"><label class="form-label">وقت تسليم الوحدة (الخروج)</label>
+      <div class="period-tabs-3">
+        <button class="tab-btn" id="coTime12" onclick="setCheckoutTime('12:00')">🕛 12:00 ظهراً</button>
+        <button class="tab-btn active-day" id="coTime14" onclick="setCheckoutTime('14:00')">🕑 2:00 ظهراً</button>
+        <button class="tab-btn" id="coTime16" onclick="setCheckoutTime('16:00')">🕓 4:00 عصراً</button>
+      </div>
+    </div>
     <div class="form-group"><label class="form-label">الإيجار الإجمالي (ريال)</label><input class="form-input" id="tenantRent" placeholder="مثال: 500" type="number"></div>
     <button class="submit-btn green" id="saveTenantBtn" onclick="saveTenant()">إضافة المستأجر 🧑‍💼</button>
   </div>
@@ -464,11 +471,27 @@ let currentTenantPeriod  = 'يوم';
 let currentExpCat        = 'صيانة';
 let editPaidStatus       = false;
 let confirmCallback      = null;
+let currentCheckoutTime  = '14:00';
 let subData              = {status:'none', active:false, days_left:0};
 
 const fmt      = n => Number(n||0).toLocaleString('ar-SA');
 const catIcons = {'صيانة':'🔧','رواتب':'👷','فواتير':'💡','تسويق':'📢','قانوني':'⚖️','أخرى':'📦'};
 const today    = () => new Date().toISOString().split('T')[0];
+
+// كاش بسيط لتقليل الطلبات المتكررة
+const _apiCache = {};
+const CACHE_TTL = 5000; // 5 ثوانٍ
+function cachedApi(method, path, body) {
+  if (method === 'GET') {
+    const key = path;
+    const cached = _apiCache[key];
+    if (cached && Date.now() - cached.time < CACHE_TTL) return Promise.resolve(cached.data);
+    return api(method, path, body).then(data => { _apiCache[key] = { data, time: Date.now() }; return data; });
+  }
+  // عند الكتابة، امسح الكاش
+  Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+  return api(method, path, body);
+}
 
 // ✅ FIX #5: دالة تنظيف HTML لمنع XSS في الفرونت
 function escHtml(str) {
@@ -494,7 +517,7 @@ function confirm2(title, sub, cb) {
   confirmCallback = cb;
   document.getElementById('confirmOverlay').style.display = 'flex';
 }
-function runConfirm()  { closeConfirm(); if(confirmCallback) confirmCallback(); }
+function runConfirm()  { const cb = confirmCallback; closeConfirm(); if(cb) cb(); }
 function closeConfirm(){ document.getElementById('confirmOverlay').style.display = 'none'; confirmCallback = null; }
 function setBtn(id, loading, label) {
   const b = document.getElementById(id); if (!b) return;
@@ -594,12 +617,13 @@ async function login() {
 
   jwtToken = data.token;
   subData  = {
-    status:   data.sub_status  || 'none',
-    active:   data.sub_status  && data.sub_status !== 'none' && (data.sub_days || 0) > 0,
+    status:    data.sub_status  || 'none',
+    active:    data.sub_status  && data.sub_status !== 'none' && (data.sub_days || 0) > 0,
     days_left: data.sub_days   || 0,
-    expires:   data.sub_expires || ''
+    expires:   data.sub_expires || '',
+    free_mode: data.sub_status === 'free'
   };
-  document.getElementById('userName').textContent = data.first_name || 'مُلّاك';
+  document.getElementById('userName').textContent = data.first_name || 'إدارة العقارات';
 
   if (data.session_id) {
     sessionId        = data.session_id;
@@ -620,10 +644,10 @@ async function init() {
       setTimeout(() => {
         updateSubBanner();
         goTo('subscription');
-        setTimeout(() => loadSubscription(), 1500);
-      }, 1400);
+        setTimeout(() => loadSubscription(), 800);
+      }, 600);
     } else {
-      setTimeout(() => { updateSubBanner(); goTo('home'); }, 1400);
+      setTimeout(() => { updateSubBanner(); goTo('home'); }, 600);
     }
   } catch(e) {
     console.error('Login failed:', e.message);
@@ -658,7 +682,7 @@ function goBack() {
 // ============================================================
 async function loadHome() {
   try {
-    const s = await api('GET', '/api/stats');
+    const s = await cachedApi('GET', '/api/stats');
     document.getElementById('statProps').textContent    = s.props    ?? 0;
     document.getElementById('statTenants').textContent  = s.tenants  ?? 0;
     document.getElementById('statIncome').textContent   = fmt(s.income);
@@ -848,7 +872,8 @@ function calcEndDate(){
   if(currentTenantPeriod==='شهر')d.setMonth(d.getMonth()+count);
   if(currentTenantPeriod==='سنة')d.setFullYear(d.getFullYear()+count);
   const endStr=d.toISOString().split('T')[0];
-  disp.textContent=`📅 ${endStr}`;
+  const timeLabel = currentCheckoutTime === '12:00' ? '12:00 ظهراً' : currentCheckoutTime === '14:00' ? '2:00 ظهراً' : '4:00 عصراً';
+  disp.textContent=`📅 ${endStr} · 🕐 الخروج ${timeLabel}`;
   box.dataset.end=endStr;
   box.style.display='block';
 }
@@ -861,6 +886,7 @@ async function renderTenantForm(){
     document.getElementById('tenantUnit').innerHTML='<option value="">اختر الوحدة</option>';
     document.getElementById('tenantStartDate').value=today();
     currentTenantPeriod='يوم';setTenantPeriod('يوم');
+    currentCheckoutTime='14:00';setCheckoutTime('14:00');
     setBtn('saveTenantBtn',false,'إضافة المستأجر 🧑‍💼');
     calcEndDate();
   }catch(e){toast('❌ '+e.message,'error');}
@@ -874,6 +900,15 @@ function setTenantPeriod(p){
   if(p==='سنة'){document.getElementById('tenTabYear').className='tab-btn active-annual';cl.textContent='عدد السنوات';}
   calcEndDate();
 }
+function setCheckoutTime(t){
+  currentCheckoutTime=t;
+  ['coTime12','coTime14','coTime16'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    el.className='tab-btn'+(
+      (t==='12:00'&&id==='coTime12')||(t==='14:00'&&id==='coTime14')||(t==='16:00'&&id==='coTime16')
+      ?' active-day':'');
+  });
+}
 async function updateUnitSelect(){
   const propId=document.getElementById('tenantProp').value;
   const unitSel=document.getElementById('tenantUnit');
@@ -883,7 +918,11 @@ async function updateUnitSelect(){
     const units=await api('GET',`/api/units?property_id=${propId}`);
     unitSel.innerHTML='<option value="">اختر الوحدة</option>';
     if(!units.length){unitSel.innerHTML='<option value="">لا توجد وحدات</option>';return;}
-    units.forEach(u=>{unitSel.innerHTML+=`<option value="${u.unit_num}" ${u.tenant_name?'disabled':''}>${escHtml(u.unit_type)} رقم ${u.unit_num}${u.tenant_name?' — '+escHtml(u.tenant_name)+' (مشغولة)':''}</option>`;});
+    units.forEach(u=>{
+      const occupied = u.tenant_name && !u.expired;
+      const endInfo = u.tenant_end_date ? ` (ينتهي ${u.tenant_end_date})` : '';
+      unitSel.innerHTML+=`<option value="${u.unit_num}" ${occupied?'disabled':''}>${escHtml(u.unit_type)} رقم ${u.unit_num}${occupied?' — '+escHtml(u.tenant_name)+' (مشغولة'+endInfo+')':u.expired?' — متاحة (انتهى العقد)':''}</option>`;
+    });
   }catch(e){unitSel.innerHTML='<option value="">خطأ</option>';}
 }
 async function saveTenant(){
@@ -907,7 +946,7 @@ async function saveTenant(){
   const prop=props.find(p=>p.id===propId);
   setBtn('saveTenantBtn',true,'جاري الحفظ...');
   try{
-    await api('POST','/api/tenants',{name,phone,property_id:propId,unit_num:parseInt(unitN),rent,period:currentTenantPeriod,period_count:count,period_label:pl,start_date:sd||null,end_date:ed||null});
+    await api('POST','/api/tenants',{name,phone,property_id:propId,unit_num:parseInt(unitN),rent,period:currentTenantPeriod,period_count:count,period_label:pl,start_date:sd||null,end_date:ed||null,checkout_time:currentCheckoutTime});
     ['tenantName','tenantPhone','tenantRent','tenantCount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     showSuccess('تم إضافة المستأجر! 🧑‍💼',`${name}\n🏗️ ${prop?.name} · 🚪 وحدة ${unitN}\n📋 ${pl} · 💰 ${fmt(rent)} ريال${sd?'\n📅 '+sd+' ← '+ed:''}`);
   }catch(e){toast('❌ '+e.message,'error');}
@@ -1111,7 +1150,11 @@ function updateSubBanner() {
     sub.textContent   = 'لا يوجد اشتراك';
     return;
   }
-  if (d.status === 'trial') {
+  if (d.status === 'free' || d.free_mode) {
+    title.textContent = '🆓 وصول مجاني';
+    sub.style.color   = 'var(--green)';
+    sub.textContent   = 'التطبيق مجاني حالياً — استمتع بكامل المميزات';
+  } else if (d.status === 'trial') {
     title.textContent = '🎁 فترة تجريبية';
     sub.style.color   = 'var(--gold)';
     sub.textContent   = `${d.days_left} يوم متبقي من التجربة المجانية`;
@@ -1136,29 +1179,31 @@ async function loadSubscription() {
     updateSubBanner();
 
     const statusColor = d.active
-      ? (d.status === 'trial' ? 'var(--gold)' : 'var(--green)')
+      ? (d.status === 'free' || d.free_mode ? 'var(--green)' : d.status === 'trial' ? 'var(--gold)' : 'var(--green)')
       : 'var(--red)';
-    const statusLabel = d.status === 'trial'  ? '🎁 تجريبي'
+    const statusLabel = (d.status === 'free' || d.free_mode) ? '🆓 مجاني'
+                      : d.status === 'trial'  ? '🎁 تجريبي'
                       : d.status === 'active' ? '✅ نشط'
                       : '❌ منتهٍ';
     const expiryText = d.expires_at
       ? new Date(d.expires_at).toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})
       : '—';
+    const isFree = d.status === 'free' || d.free_mode;
 
     c.innerHTML = `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px 20px;margin-bottom:16px;text-align:center;">
-        <div style="font-size:48px;margin-bottom:12px;">${d.active ? (d.status==='trial'?'🎁':'✅') : '🔒'}</div>
+        <div style="font-size:48px;margin-bottom:12px;">${isFree ? '🆓' : d.active ? (d.status==='trial'?'🎁':'✅') : '🔒'}</div>
         <div style="font-size:22px;font-weight:800;color:${statusColor};margin-bottom:6px;">${statusLabel}</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-          ${d.active ? `<span style="color:${statusColor};font-weight:700">${d.days_left} يوم</span> متبقي — ينتهي ${escHtml(expiryText)}` : 'اشتراكك منتهٍ'}
+          ${isFree ? 'التطبيق مجاني حالياً — استمتع بكامل المميزات!' : d.active ? `<span style="color:${statusColor};font-weight:700">${d.days_left} يوم</span> متبقي — ينتهي ${escHtml(expiryText)}` : 'اشتراكك منتهٍ'}
         </div>
         ${d.active ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px 16px;font-size:12px;color:var(--muted);">
-          يمكنك مشاهدة البيانات والتقارير<br>
-          ${d.status==='active'?'الاشتراك يجدد تلقائياً كل شهر':''}
+          ${isFree ? '🎉 جميع المميزات متاحة مجاناً' : 'يمكنك مشاهدة البيانات والتقارير'}
+          ${!isFree && d.status==='active'?'<br>الاشتراك يجدد تلقائياً كل شهر':''}
         </div>` : ''}
       </div>
 
-      <div style="background:linear-gradient(135deg,#1e3a5f,#0f2030);border:1px solid #2a4a7f;border-radius:18px;padding:24px 20px;margin-bottom:16px;">
+      ${!isFree ? `<div style="background:linear-gradient(135deg,#1e3a5f,#0f2030);border:1px solid #2a4a7f;border-radius:18px;padding:24px 20px;margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
           <div>
             <div style="font-size:16px;font-weight:800;">📦 الخطة الشهرية</div>
@@ -1176,14 +1221,14 @@ async function loadSubscription() {
           <div>✅ إحصائيات مالية شاملة</div>
         </div>
         <button class="submit-btn blue" id="payBtn" onclick="startCheckout()" style="width:100%;">
-          ${d.active ? '🔄 تجديد الاشتراك' : `💳 اشترك الآن — ${Number(d.final_price || 29)} ريال/شهر`}
+          ${d.active ? '🔄 تجديد الاشتراك' : '💳 اشترك الآن — ' + Number(d.final_price || 29) + ' ريال/شهر'}
         </button>
       </div>
 
       <div style="text-align:center;font-size:11px;color:var(--muted);line-height:1.8;padding:0 8px;">
         الدفع عبر بوابة جيديا الآمنة 🔒<br>
         مدى · فيزا · ماستركارد · أبل باي
-      </div>`;
+      </div>` : ''}`;
   } catch(e) {
     c.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;
   }
