@@ -1132,6 +1132,7 @@ async function loadSubscription() {
   try {
     const d = await api('GET', '/api/subscription/status');
     subData  = d;
+    window._subFinalPrice = Number(d.final_price || 29);
     updateSubBanner();
 
     const statusColor = d.active
@@ -1164,7 +1165,7 @@ async function loadSubscription() {
             <div style="font-size:12px;color:var(--muted);margin-top:4px;">وصول كامل لجميع المميزات</div>
           </div>
           <div style="text-align:left;">
-            <div style="font-size:28px;font-weight:900;color:var(--gold);">29</div>
+            <div style="font-size:28px;font-weight:900;color:var(--gold);">${Number(d.final_price || 29)}</div>
             <div style="font-size:11px;color:var(--muted);">ريال / شهر</div>
           </div>
         </div>
@@ -1175,7 +1176,7 @@ async function loadSubscription() {
           <div>✅ إحصائيات مالية شاملة</div>
         </div>
         <button class="submit-btn blue" id="payBtn" onclick="startCheckout()" style="width:100%;">
-          ${d.active ? '🔄 تجديد الاشتراك' : '💳 اشترك الآن — 29 ريال/شهر'}
+          ${d.active ? '🔄 تجديد الاشتراك' : `💳 اشترك الآن — ${Number(d.final_price || 29)} ريال/شهر`}
         </button>
       </div>
 
@@ -1208,7 +1209,7 @@ async function startCheckout() {
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💳 اشترك الآن — 29 ريال/شهر'; }
+    if (btn) { btn.disabled = false; btn.textContent = `💳 اشترك الآن — ${Number(window._subFinalPrice || 29)} ريال/شهر`; }
   }
 }
 
