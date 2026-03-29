@@ -378,21 +378,53 @@ def verify_order_with_geidea(merchant_ref: str) -> bool:
 def extract_checkout_url(resp_data: dict) -> str:
     if not isinstance(resp_data, dict):
         return ""
+
+    session = resp_data.get("session") or {}
+    data    = resp_data.get("data")  or {}
+    order   = resp_data.get("order") or {}
+
     candidates = [
         resp_data.get("paymentUrl"),
         resp_data.get("redirectUrl"),
         resp_data.get("checkoutUrl"),
-        (resp_data.get("session") or {}).get("paymentUrl"),
-        (resp_data.get("session") or {}).get("redirectUrl"),
-        (resp_data.get("session") or {}).get("url"),
+        resp_data.get("url"),
+        resp_data.get("redirect_url"),
+        resp_data.get("payment_url"),
+
+        session.get("paymentUrl"),
+        session.get("redirectUrl"),
+        session.get("checkoutUrl"),
+        session.get("url"),
+        session.get("redirect_url"),
+        session.get("payment_url"),
+
+        data.get("paymentUrl"),
+        data.get("redirectUrl"),
+        data.get("checkoutUrl"),
+        data.get("url"),
+
+        order.get("paymentUrl"),
+        order.get("redirectUrl"),
+        order.get("checkoutUrl"),
+        order.get("url"),
     ]
+
     for url in candidates:
         if isinstance(url, str) and url.strip():
             return url.strip()
-    session_id = (resp_data.get("session") or {}).get("id")
+
+    session_id = (
+        session.get("id")
+        or resp_data.get("sessionId")
+        or resp_data.get("session_id")
+        or data.get("sessionId")
+        or data.get("id")
+    )
+
     if session_id:
         hpp_base = GEIDEA_HPP_BASE.rstrip("/")
         return f"{hpp_base}/?{session_id}"
+
     return ""
 
 # ============================================================
@@ -891,7 +923,7 @@ def test_geidea():
         try:    body = resp.json()
         except: body = {"raw": resp.text[:1000]}
         checkout_url = extract_checkout_url(body)
-        return jsonify({"ok": resp.ok, "status_code": resp.status_code, "checkout_url": checkout_url})
+        return jsonify({"ok": resp.ok, "status_code": resp.status_code, "checkout_url": checkout_url, "body": body})
     except requests.exceptions.Timeout:
         return jsonify({"ok": False, "error": "Timeout"}), 502
     except requests.exceptions.ConnectionError:
