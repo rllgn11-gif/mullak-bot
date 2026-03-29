@@ -68,7 +68,6 @@ bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 # ============================================================
 # 🌐 CORS + HTTPS
 # ============================================================
-# ✅ FIX #15: إجبار HTTPS في Production
 @app.before_request
 def force_https():
     if request.headers.get("X-Forwarded-Proto", "https") == "http":
@@ -82,7 +81,6 @@ def add_cors_and_security(response):
         response.headers["Access-Control-Allow-Origin"]  = origin
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    # ✅ Security Headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-XSS-Protection"]       = "1; mode=block"
@@ -118,9 +116,7 @@ def rate_limit(max_calls: int, period: int):
 # ============================================================
 # 🧹 XSS Protection Helper
 # ============================================================
-# ✅ FIX #2: دالة تنظيف HTML لمنع XSS
 def esc(value):
-    """تنظيف النص من أكواد HTML الخبيثة"""
     if value is None:
         return ""
     return html_module.escape(str(value))
@@ -140,7 +136,6 @@ def sb_select(table, filters=None, select="*", order=None, limit=None, offset=No
     params = {"select": select}
     if filters: params.update(filters)
     if order:   params["order"] = order
-    # ✅ FIX #14: دعم Pagination
     if limit:   params["limit"]  = str(limit)
     if offset:  params["offset"] = str(offset)
     r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=sb_headers(), params=params)
@@ -165,16 +160,13 @@ def sb_delete(table, filters):
     return {"ok": True}
 
 def sb_count(table, filters=None):
-    """✅ FIX #14: عدّ السجلات للـ Pagination"""
     hdrs = sb_headers()
     hdrs["Prefer"] = "count=exact"
     params = {"select": "*"}
     if filters: params.update(filters)
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}",
-                     headers=hdrs, params=params)
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=hdrs, params=params)
     r.raise_for_status()
     content_range = r.headers.get("Content-Range", "")
-    # Content-Range: 0-9/42
     total = 0
     if "/" in content_range:
         try:
@@ -182,6 +174,43 @@ def sb_count(table, filters=None):
         except (ValueError, IndexError):
             total = len(r.json())
     return total
+
+# ============================================================
+# ⚙️ إعدادات السعر والخصم (Settings)
+# ============================================================
+def get_setting(key, default=None):
+    try:
+        rows = sb_select("settings", {"key": f"eq.{key}"})
+        return rows[0]["value"] if rows else default
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    try:
+        rows = sb_select("settings", {"key": f"eq.{key}"})
+        if rows:
+            sb_update("settings", {"key": f"eq.{key}"}, {"value": str(value)})
+        else:
+            sb_insert("settings", {"key": key, "value": str(value)})
+    except Exception as e:
+        raise Exception(f"فشل حفظ الإعداد: {e}")
+
+def get_monthly_price():
+    try:
+        return float(get_setting("plan_monthly_amount", PLAN_MONTHLY_AMOUNT))
+    except Exception:
+        return float(PLAN_MONTHLY_AMOUNT)
+
+def get_discount_percent():
+    try:
+        return float(get_setting("discount_percent", 0))
+    except Exception:
+        return 0.0
+
+def get_final_price():
+    base     = get_monthly_price()
+    discount = get_discount_percent()
+    return max(0, round(base - (base * discount / 100), 2))
 
 # ============================================================
 # 🔐 Telegram HMAC
@@ -267,7 +296,6 @@ def sub_days_left(user_id: str):
         return 0
 
 def require_write(f):
-    """يمنع الإضافة/التعديل/الحذف عند انتهاء الاشتراك"""
     @wraps(f)
     def decorated(user, *args, **kwargs):
         if not sub_is_active(user["user_id"]):
@@ -290,24 +318,14 @@ def geidea_signature(amount: float, currency: str, merchant_ref: str, timestamp:
     ).digest()
     return base64.b64encode(sig).decode("utf-8")
 
-# ✅ FIX #1: التحقق من توقيع Geidea في الـ Callback
 def verify_geidea_callback_signature(data: dict) -> bool:
-    """
-    تحقق من HMAC-SHA256 signature في callback من Geidea.
-    Geidea ترسل signature في الـ header أو في body.
-    """
     if not GEIDEA_API_PASSWORD:
         return False
-
     received_sig = None
-    # جرّب من الـ headers
     received_sig = request.headers.get("X-Geidea-Signature") or \
                    request.headers.get("X-Signature") or \
                    data.get("signature")
-
     if not received_sig:
-        # إذا ما في signature، نتحقق بطريقة بديلة:
-        # نجيب الطلب من Geidea API مباشرة للتأكد
         merchant_ref = str(
             data.get("merchantReferenceId") or
             data.get("merchantRefId") or
@@ -316,33 +334,26 @@ def verify_geidea_callback_signature(data: dict) -> bool:
         if not merchant_ref:
             return False
         return verify_order_with_geidea(merchant_ref)
-
-    # تحقق من التوقيع
-    order = data.get("order") or data
-    amount    = str(order.get("amount", ""))
-    currency  = str(order.get("currency", "SAR"))
-    order_id  = str(order.get("orderId", ""))
-    status    = str(order.get("status") or data.get("status") or "")
-    timestamp = str(order.get("createdDate") or data.get("timestamp") or "")
+    order        = data.get("order") or data
+    amount       = str(order.get("amount", ""))
+    currency     = str(order.get("currency", "SAR"))
+    order_id     = str(order.get("orderId", ""))
+    status       = str(order.get("status") or data.get("status") or "")
+    timestamp    = str(order.get("createdDate") or data.get("timestamp") or "")
     merchant_ref = str(
         order.get("merchantReferenceId") or
         data.get("merchantReferenceId") or ""
     )
-
     msg = f"{GEIDEA_PUBLIC_KEY}{amount}{currency}{merchant_ref}{order_id}{status}{timestamp}"
     expected = base64.b64encode(
         hmac.new(GEIDEA_API_PASSWORD.encode(), msg.encode(), hashlib.sha256).digest()
     ).decode()
-
     if hmac.compare_digest(expected, received_sig):
         return True
-
-    # fallback: تحقق مباشر من Geidea API
     return verify_order_with_geidea(merchant_ref)
 
 
 def verify_order_with_geidea(merchant_ref: str) -> bool:
-    """تحقق من حالة الطلب مباشرة من Geidea API"""
     try:
         resp = requests.get(
             f"{GEIDEA_BASE_URL}/payment-intent/api/v2/order",
@@ -457,7 +468,6 @@ def health():
 # ============================================================
 # 📊 Sessions
 # ============================================================
-# ✅ FIX #4: إضافة require_auth لـ session/end
 @app.route("/api/session/end", methods=["POST"])
 @require_auth
 def end_session(user):
@@ -468,7 +478,6 @@ def end_session(user):
         session_id = d.get("session_id", "")
         duration   = max(0, min(int(d.get("duration", 0)), 86400))
         if session_id:
-            # ✅ تأكد أن الجلسة تابعة للمستخدم نفسه
             sb_update("sessions",
                       {"id": f"eq.{session_id}", "user_id": f"eq.{user['user_id']}"},
                       {"ended_at": datetime.now(timezone.utc).isoformat(),
@@ -501,7 +510,6 @@ def session_ping(user):
 @rate_limit(max_calls=60, period=60)
 def get_properties(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
@@ -552,8 +560,6 @@ def edit_property(user, prop_id):
 def delete_property(user, prop_id):
     try:
         uid = user["user_id"]
-        # ✅ FIX #13: حذف تتابعي — حذف الوحدات والمستأجرين والمصروفات المرتبطة
-        # أولاً: حذف المستأجرين المرتبطين
         try:
             tenants = sb_select("tenants",
                 {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
@@ -562,23 +568,17 @@ def delete_property(user, prop_id):
                     {"id": f"eq.{t['id']}", "user_id": f"eq.{uid}"})
         except Exception as e:
             print(f"⚠️ cascade delete tenants: {e}")
-
-        # ثانياً: حذف الوحدات المرتبطة
         try:
             sb_delete("units",
                 {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
         except Exception as e:
             print(f"⚠️ cascade delete units: {e}")
-
-        # ثالثاً: حذف المصروفات المرتبطة (أو إزالة الارتباط)
         try:
             sb_update("expenses",
                 {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"},
                 {"property_id": None, "unit_num": None})
         except Exception as e:
             print(f"⚠️ cascade unlink expenses: {e}")
-
-        # أخيراً: حذف العقار نفسه
         sb_delete("properties",
             {"id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
         return jsonify({"ok": True})
@@ -608,15 +608,12 @@ def add_unit(user):
         prop_id = d.get("property_id")
         if not prop_id:
             return jsonify({"error": "property_id مطلوب"}), 400
-
-        # ✅ FIX #12: التحقق من ملكية العقار
         prop_check = sb_select("properties", {
             "id": f"eq.{prop_id}",
             "user_id": f"eq.{user['user_id']}"
         })
         if not prop_check:
             return jsonify({"error": "العقار غير موجود أو لا يخصك"}), 403
-
         result = sb_insert("units", {
             "user_id":     str(user["user_id"]),
             "property_id": prop_id,
@@ -644,7 +641,6 @@ def delete_unit(user, unit_id):
 @require_auth
 def get_tenants(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
@@ -664,8 +660,6 @@ def add_tenant(user):
         d = request.json or {}
         if not d.get("name"):
             return jsonify({"error": "الاسم مطلوب"}), 400
-
-        # ✅ FIX #12: التحقق من ملكية العقار
         prop_id = d.get("property_id")
         if prop_id:
             prop_check = sb_select("properties", {
@@ -674,7 +668,6 @@ def add_tenant(user):
             })
             if not prop_check:
                 return jsonify({"error": "العقار غير موجود أو لا يخصك"}), 403
-
         row = {
             "user_id":      str(user["user_id"]),
             "name":         d.get("name", ""),
@@ -774,7 +767,6 @@ def reset_tenants(user):
 @require_auth
 def get_expenses(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
@@ -867,11 +859,7 @@ def subscription_status(user):
 @app.route("/api/test/geidea", methods=["GET"])
 def test_geidea():
     if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
-        return jsonify({
-            "ok":   False,
-            "error": "GEIDEA_PUBLIC_KEY أو GEIDEA_API_PASSWORD غير مضبوط",
-        }), 400
-
+        return jsonify({"ok": False, "error": "GEIDEA_PUBLIC_KEY أو GEIDEA_API_PASSWORD غير مضبوط"}), 400
     if not RAILWAY_URL:
         return jsonify({"ok": False, "error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط"}), 400
 
@@ -879,10 +867,12 @@ def test_geidea():
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
     merchant_ref = f"test_{int(time.time())}"
     timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+    # ✅ استخدام get_final_price() بدلاً من PLAN_MONTHLY_AMOUNT
+    final_price  = get_final_price()
+    signature    = geidea_signature(final_price, "SAR", merchant_ref, timestamp)
 
     payload = {
-        "amount":              PLAN_MONTHLY_AMOUNT,
+        "amount":              final_price,
         "currency":            "SAR",
         "timestamp":           timestamp,
         "merchantReferenceId": merchant_ref,
@@ -893,26 +883,18 @@ def test_geidea():
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
-
     try:
         resp = requests.post(url, json=payload, auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
             timeout=20)
         try:    body = resp.json()
         except: body = {"raw": resp.text[:1000]}
-
         checkout_url = extract_checkout_url(body)
-
-        return jsonify({
-            "ok":           resp.ok,
-            "status_code":  resp.status_code,
-            "checkout_url": checkout_url,
-        })
-
+        return jsonify({"ok": resp.ok, "status_code": resp.status_code, "checkout_url": checkout_url})
     except requests.exceptions.Timeout:
-        return jsonify({"ok": False, "error": "Timeout — تحقق من GEIDEA_BASE_URL"}), 502
+        return jsonify({"ok": False, "error": "Timeout"}), 502
     except requests.exceptions.ConnectionError:
-        return jsonify({"ok": False, "error": "Connection error — تحقق من GEIDEA_BASE_URL"}), 502
+        return jsonify({"ok": False, "error": "Connection error"}), 502
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -928,14 +910,16 @@ def create_checkout(user):
     if not RAILWAY_URL:
         return jsonify({"error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط"}), 500
 
+    # ✅ استخدام get_final_price() — يشمل الخصم إن وُجد
+    final_price  = get_final_price()
     merchant_ref = f"mullak_{user['user_id']}_{int(time.time())}"
     callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
     timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+    signature    = geidea_signature(final_price, "SAR", merchant_ref, timestamp)
 
     payload = {
-        "amount":              PLAN_MONTHLY_AMOUNT,
+        "amount":              final_price,
         "currency":            "SAR",
         "timestamp":           timestamp,
         "merchantReferenceId": merchant_ref,
@@ -946,42 +930,35 @@ def create_checkout(user):
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
-    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}")
+    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}, amount={final_price}")
 
     try:
         resp = requests.post(url, json=payload, auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
             timeout=20)
-
         try:    resp_data = resp.json()
         except: resp_data = {"raw": resp.text[:1000]}
-
         print(f"📩 Geidea: status={resp.status_code}")
-
         if not resp.ok:
             error_msg = (resp_data.get("responseMessage") or
                          resp_data.get("message") or
                          f"خطأ {resp.status_code} من بوابة الدفع")
             return jsonify({"error": error_msg}), 502
-
         payment_url = extract_checkout_url(resp_data)
         if not payment_url:
             return jsonify({"error": "لم يُعثر على رابط الدفع في رد Geidea"}), 502
-
         try:
             sb_insert("payment_orders", {
                 "user_id":    str(user["user_id"]),
                 "order_id":   merchant_ref,
-                "amount":     PLAN_MONTHLY_AMOUNT,
+                "amount":     final_price,
                 "status":     "pending",
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
         except Exception as e:
             print(f"⚠️ payment_orders (non-critical): {e}")
-
         print(f"✅ payment_url: {payment_url}")
         return jsonify({"payment_url": payment_url, "order_id": merchant_ref})
-
     except requests.exceptions.Timeout:
         return jsonify({"error": "انتهت مهلة الاتصال ببوابة الدفع"}), 502
     except requests.exceptions.ConnectionError:
@@ -993,12 +970,9 @@ def create_checkout(user):
 
 @app.route("/api/subscription/callback", methods=["POST"])
 def payment_callback():
-    """✅ FIX #1: Geidea callback مع التحقق من الأصالة"""
     try:
         data = request.json or {}
         print(f"📩 Geidea Callback received")
-
-        # ✅ FIX #1: تحقق من أصالة الـ callback
         if not verify_geidea_callback_signature(data):
             print("❌ Callback signature verification FAILED")
             return jsonify({"error": "unauthorized", "processed": False}), 403
@@ -1016,11 +990,9 @@ def payment_callback():
         ).strip()
 
         print(f"    status={status!r}, ref={merchant_ref!r}")
-
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if status not in SUCCESS_CODES:
             return jsonify({"ok": True, "processed": False, "status": status}), 200
-
         if not merchant_ref.startswith("mullak_"):
             return jsonify({"ok": True, "processed": False, "reason": "unknown ref"}), 200
 
@@ -1039,7 +1011,6 @@ def payment_callback():
                 base = now_utc
 
         new_expires = (base + timedelta(days=PLAN_MONTHLY_DAYS)).isoformat()
-
         if existing:
             sb_update("subscriptions", {"user_id": f"eq.{user_id}"}, {
                 "plan": "monthly", "status": "active",
@@ -1061,7 +1032,7 @@ def payment_callback():
             if bot:
                 bot.send_message(int(user_id),
                     f"🎉 *تم تفعيل اشتراكك بنجاح!*\n\n"
-                    f"✅ الخطة الشهرية — {int(PLAN_MONTHLY_AMOUNT)} ريال\n"
+                    f"✅ الخطة الشهرية — {int(get_final_price())} ريال\n"
                     f"📅 تنتهي في: {new_expires[:10]}\n\n"
                     f"استمتع بجميع مميزات مُلّاك 🏠",
                     parse_mode="Markdown")
@@ -1070,7 +1041,6 @@ def payment_callback():
 
         print(f"✅ اشتراك مُفعَّل: user={user_id}, expires={new_expires}")
         return jsonify({"ok": True, "processed": True})
-
     except Exception as e:
         print(f"❌ Callback error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1082,7 +1052,6 @@ def verify_payment(user, order_id):
     try:
         if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
             return jsonify({"error": "بوابة الدفع غير مضبوطة"}), 500
-
         resp = requests.get(
             f"{GEIDEA_BASE_URL}/payment-intent/api/v2/order",
             params={"merchantReferenceId": order_id},
@@ -1090,16 +1059,13 @@ def verify_payment(user, order_id):
             headers={"Accept": "application/json"},
             timeout=15
         )
-
         if not resp.ok:
             return jsonify({"error": f"خطأ {resp.status_code} من Geidea"}), 502
-
         data         = resp.json()
         order_status = str(
             data.get("status") or
             (data.get("order") or {}).get("status") or ""
         ).lower()
-
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if order_status in SUCCESS_CODES:
             uid      = user["user_id"]
@@ -1122,14 +1088,12 @@ def verify_payment(user, order_id):
                     "expires_at": new_exp, "created_at": now_utc.isoformat()
                 })
             return jsonify({"paid": True, "expires_at": new_exp})
-
         return jsonify({"paid": False, "status": order_status})
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
-# 📄 تقرير PDF — ✅ FIX #2: XSS Protection
+# 📄 تقرير PDF
 # ============================================================
 @app.route("/api/report/print", methods=["GET"])
 @require_auth
@@ -1151,7 +1115,6 @@ def print_report(user):
         today   = datetime.now().strftime("%Y/%m/%d")
         fmt     = lambda n: f"{int(n or 0):,}"
 
-        # ✅ كل القيم تمر عبر esc() لمنع XSS
         tenants_rows = ""
         for t in tenants:
             color  = "#10b981" if t.get("paid") else "#ef4444"
@@ -1275,7 +1238,7 @@ def send_daily_reminders():
         print(f"❌ التذكيرات: {e}")
 
 # ============================================================
-# 🤖 تيليجرام بوت — ✅ FIX #9: Webhook Secret
+# 🤖 تيليجرام بوت
 # ============================================================
 def app_keyboard():
     markup = InlineKeyboardMarkup()
@@ -1286,7 +1249,6 @@ def app_keyboard():
     return markup
 
 if bot:
-    # ✅ FIX #9: استخدام WEBHOOK_SECRET بدلاً من BOT_TOKEN في URL
     @app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
     def webhook():
         if request.headers.get("content-type") == "application/json":
@@ -1345,6 +1307,81 @@ if bot:
         except Exception as e:
             bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
 
+    # ============================================================
+    # 💰 أوامر المدير — السعر والخصم
+    # ============================================================
+    @bot.message_handler(commands=["show_price"])
+    def show_price_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        base     = get_monthly_price()
+        discount = get_discount_percent()
+        final    = get_final_price()
+        text = (
+            f"💳 *إعدادات الاشتراك الحالية*\n\n"
+            f"💰 السعر الأساسي: `{base}` ريال\n"
+            f"🏷️ الخصم الحالي: `{discount}%`\n"
+            f"✅ السعر النهائي: `{final}` ريال"
+        )
+        bot.reply_to(msg, text, parse_mode="Markdown")
+
+    @bot.message_handler(commands=["price"])
+    def set_price_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        parts = (msg.text or "").split()
+        if len(parts) != 2:
+            return bot.reply_to(msg, "📌 الاستخدام الصحيح:\n/price 39")
+        try:
+            new_price = float(parts[1])
+            if new_price < 0:
+                return bot.reply_to(msg, "❌ السعر يجب أن يكون 0 أو أكثر")
+            set_setting("plan_monthly_amount", new_price)
+            final = get_final_price()
+            bot.reply_to(msg,
+                f"✅ *تم تحديث السعر*\n\n"
+                f"💰 السعر الجديد: `{new_price}` ريال\n"
+                f"🏷️ الخصم الحالي: `{get_discount_percent()}%`\n"
+                f"✅ السعر النهائي: `{final}` ريال",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["discount"])
+    def set_discount_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        parts = (msg.text or "").split()
+        if len(parts) != 2:
+            return bot.reply_to(msg, "📌 الاستخدام الصحيح:\n/discount 20")
+        try:
+            percent = float(parts[1])
+            if percent < 0 or percent > 100:
+                return bot.reply_to(msg, "❌ الخصم يجب أن يكون بين 0 و100")
+            set_setting("discount_percent", percent)
+            final = get_final_price()
+            bot.reply_to(msg,
+                f"✅ *تم تطبيق الخصم*\n\n"
+                f"💰 السعر الأساسي: `{get_monthly_price()}` ريال\n"
+                f"🏷️ الخصم الجديد: `{percent}%`\n"
+                f"✅ السعر النهائي: `{final}` ريال",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["discount_off"])
+    def discount_off_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("discount_percent", 0)
+            bot.reply_to(msg,
+                f"✅ *تم إلغاء الخصم*\n\n"
+                f"💰 السعر الحالي: `{get_monthly_price()}` ريال (بدون خصم)",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
     @bot.message_handler(func=lambda m: not (m.text or "").startswith("/"))
     def default(msg):
         bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
@@ -1353,7 +1390,6 @@ if bot:
 def set_webhook():
     if not RAILWAY_URL:
         return jsonify({"error": "أضف RAILWAY_PUBLIC_DOMAIN في Variables"}), 400
-    # ✅ FIX #9: استخدام WEBHOOK_SECRET
     url = f"https://{RAILWAY_URL}/webhook/{WEBHOOK_SECRET}"
     if bot:
         bot.remove_webhook()
