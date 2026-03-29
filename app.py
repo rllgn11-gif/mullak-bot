@@ -7,7 +7,6 @@ import hmac
 import hashlib
 import threading
 import base64
-import re
 import html as html_module
 from datetime import datetime, timezone, timedelta
 from urllib.parse import unquote
@@ -48,7 +47,7 @@ GEIDEA_HPP_BASE     = os.environ.get("GEIDEA_HPP_BASE", "https://www.ksamerchant
 # 💰 الاشتراك
 PLAN_MONTHLY_AMOUNT = float(os.environ.get("PLAN_MONTHLY_AMOUNT", "29"))
 PLAN_MONTHLY_DAYS   = 30
-TRIAL_DAYS          = 7
+TRIAL_DAYS          = 30
 
 # ✅ FIX #9: Webhook Secret منفصل عن Bot Token
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", hashlib.sha256((BOT_TOKEN or "fallback").encode()).hexdigest()[:32])
@@ -69,7 +68,6 @@ bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 # ============================================================
 # 🌐 CORS + HTTPS
 # ============================================================
-# ✅ FIX #15: إجبار HTTPS في Production
 @app.before_request
 def force_https():
     if request.headers.get("X-Forwarded-Proto", "https") == "http":
@@ -83,7 +81,6 @@ def add_cors_and_security(response):
         response.headers["Access-Control-Allow-Origin"]  = origin
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    # ✅ Security Headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-XSS-Protection"]       = "1; mode=block"
@@ -119,9 +116,7 @@ def rate_limit(max_calls: int, period: int):
 # ============================================================
 # 🧹 XSS Protection Helper
 # ============================================================
-# ✅ FIX #2: دالة تنظيف HTML لمنع XSS
 def esc(value):
-    """تنظيف النص من أكواد HTML الخبيثة"""
     if value is None:
         return ""
     return html_module.escape(str(value))
@@ -141,7 +136,6 @@ def sb_select(table, filters=None, select="*", order=None, limit=None, offset=No
     params = {"select": select}
     if filters: params.update(filters)
     if order:   params["order"] = order
-    # ✅ FIX #14: دعم Pagination
     if limit:   params["limit"]  = str(limit)
     if offset:  params["offset"] = str(offset)
     r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=sb_headers(), params=params)
@@ -166,16 +160,13 @@ def sb_delete(table, filters):
     return {"ok": True}
 
 def sb_count(table, filters=None):
-    """✅ FIX #14: عدّ السجلات للـ Pagination"""
     hdrs = sb_headers()
     hdrs["Prefer"] = "count=exact"
     params = {"select": "*"}
     if filters: params.update(filters)
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}",
-                     headers=hdrs, params=params)
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=hdrs, params=params)
     r.raise_for_status()
     content_range = r.headers.get("Content-Range", "")
-    # Content-Range: 0-9/42
     total = 0
     if "/" in content_range:
         try:
@@ -183,6 +174,43 @@ def sb_count(table, filters=None):
         except (ValueError, IndexError):
             total = len(r.json())
     return total
+
+# ============================================================
+# ⚙️ إعدادات السعر والخصم (Settings)
+# ============================================================
+def get_setting(key, default=None):
+    try:
+        rows = sb_select("settings", {"key": f"eq.{key}"})
+        return rows[0]["value"] if rows else default
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    try:
+        rows = sb_select("settings", {"key": f"eq.{key}"})
+        if rows:
+            sb_update("settings", {"key": f"eq.{key}"}, {"value": str(value)})
+        else:
+            sb_insert("settings", {"key": key, "value": str(value)})
+    except Exception as e:
+        raise Exception(f"فشل حفظ الإعداد: {e}")
+
+def get_monthly_price():
+    try:
+        return float(get_setting("plan_monthly_amount", PLAN_MONTHLY_AMOUNT))
+    except Exception:
+        return float(PLAN_MONTHLY_AMOUNT)
+
+def get_discount_percent():
+    try:
+        return float(get_setting("discount_percent", 0))
+    except Exception:
+        return 0.0
+
+def get_final_price():
+    base     = get_monthly_price()
+    discount = get_discount_percent()
+    return max(0, round(base - (base * discount / 100), 2))
 
 # ============================================================
 # 🔐 Telegram HMAC
@@ -247,7 +275,18 @@ def get_subscription(user_id: str):
     except Exception:
         return None
 
+def is_free_mode():
+    """تحقق هل الوضع المجاني مفعّل"""
+    try:
+        val = get_setting("free_mode", "on")
+        return str(val).lower() in ("on", "true", "1", "yes")
+    except Exception:
+        return True  # مجاني بالافتراضي
+
 def sub_is_active(user_id: str):
+    # إذا الوضع المجاني مفعّل، الكل يدخل مجاناً
+    if is_free_mode():
+        return True
     sub = get_subscription(user_id)
     if not sub or not sub.get("expires_at"):
         return False
@@ -268,7 +307,6 @@ def sub_days_left(user_id: str):
         return 0
 
 def require_write(f):
-    """يمنع الإضافة/التعديل/الحذف عند انتهاء الاشتراك"""
     @wraps(f)
     def decorated(user, *args, **kwargs):
         if not sub_is_active(user["user_id"]):
@@ -291,24 +329,14 @@ def geidea_signature(amount: float, currency: str, merchant_ref: str, timestamp:
     ).digest()
     return base64.b64encode(sig).decode("utf-8")
 
-# ✅ FIX #1: التحقق من توقيع Geidea في الـ Callback
 def verify_geidea_callback_signature(data: dict) -> bool:
-    """
-    تحقق من HMAC-SHA256 signature في callback من Geidea.
-    Geidea ترسل signature في الـ header أو في body.
-    """
     if not GEIDEA_API_PASSWORD:
         return False
-
     received_sig = None
-    # جرّب من الـ headers
     received_sig = request.headers.get("X-Geidea-Signature") or \
                    request.headers.get("X-Signature") or \
                    data.get("signature")
-
     if not received_sig:
-        # إذا ما في signature، نتحقق بطريقة بديلة:
-        # نجيب الطلب من Geidea API مباشرة للتأكد
         merchant_ref = str(
             data.get("merchantReferenceId") or
             data.get("merchantRefId") or
@@ -317,33 +345,26 @@ def verify_geidea_callback_signature(data: dict) -> bool:
         if not merchant_ref:
             return False
         return verify_order_with_geidea(merchant_ref)
-
-    # تحقق من التوقيع
-    order = data.get("order") or data
-    amount    = str(order.get("amount", ""))
-    currency  = str(order.get("currency", "SAR"))
-    order_id  = str(order.get("orderId", ""))
-    status    = str(order.get("status") or data.get("status") or "")
-    timestamp = str(order.get("createdDate") or data.get("timestamp") or "")
+    order        = data.get("order") or data
+    amount       = str(order.get("amount", ""))
+    currency     = str(order.get("currency", "SAR"))
+    order_id     = str(order.get("orderId", ""))
+    status       = str(order.get("status") or data.get("status") or "")
+    timestamp    = str(order.get("createdDate") or data.get("timestamp") or "")
     merchant_ref = str(
         order.get("merchantReferenceId") or
         data.get("merchantReferenceId") or ""
     )
-
     msg = f"{GEIDEA_PUBLIC_KEY}{amount}{currency}{merchant_ref}{order_id}{status}{timestamp}"
     expected = base64.b64encode(
         hmac.new(GEIDEA_API_PASSWORD.encode(), msg.encode(), hashlib.sha256).digest()
     ).decode()
-
     if hmac.compare_digest(expected, received_sig):
         return True
-
-    # fallback: تحقق مباشر من Geidea API
     return verify_order_with_geidea(merchant_ref)
 
 
 def verify_order_with_geidea(merchant_ref: str) -> bool:
-    """تحقق من حالة الطلب مباشرة من Geidea API"""
     try:
         resp = requests.get(
             f"{GEIDEA_BASE_URL}/payment-intent/api/v2/order",
@@ -368,21 +389,53 @@ def verify_order_with_geidea(merchant_ref: str) -> bool:
 def extract_checkout_url(resp_data: dict) -> str:
     if not isinstance(resp_data, dict):
         return ""
+
+    session = resp_data.get("session") or {}
+    data    = resp_data.get("data")  or {}
+    order   = resp_data.get("order") or {}
+
     candidates = [
         resp_data.get("paymentUrl"),
         resp_data.get("redirectUrl"),
         resp_data.get("checkoutUrl"),
-        (resp_data.get("session") or {}).get("paymentUrl"),
-        (resp_data.get("session") or {}).get("redirectUrl"),
-        (resp_data.get("session") or {}).get("url"),
+        resp_data.get("url"),
+        resp_data.get("redirect_url"),
+        resp_data.get("payment_url"),
+
+        session.get("paymentUrl"),
+        session.get("redirectUrl"),
+        session.get("checkoutUrl"),
+        session.get("url"),
+        session.get("redirect_url"),
+        session.get("payment_url"),
+
+        data.get("paymentUrl"),
+        data.get("redirectUrl"),
+        data.get("checkoutUrl"),
+        data.get("url"),
+
+        order.get("paymentUrl"),
+        order.get("redirectUrl"),
+        order.get("checkoutUrl"),
+        order.get("url"),
     ]
+
     for url in candidates:
         if isinstance(url, str) and url.strip():
             return url.strip()
-    session_id = (resp_data.get("session") or {}).get("id")
+
+    session_id = (
+        session.get("id")
+        or resp_data.get("sessionId")
+        or resp_data.get("session_id")
+        or data.get("sessionId")
+        or data.get("id")
+    )
+
     if session_id:
         hpp_base = GEIDEA_HPP_BASE.rstrip("/")
         return f"{hpp_base}/?{session_id}"
+
     return ""
 
 # ============================================================
@@ -418,6 +471,7 @@ def auth():
 
     sub_status, sub_expires, sub_days = "none", None, 0
     try:
+        free = is_free_mode()
         existing_sub = get_subscription(user_id)
         if not existing_sub:
             trial_exp = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
@@ -428,11 +482,13 @@ def auth():
                 "expires_at": trial_exp,
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
-            sub_status, sub_expires, sub_days = "trial", trial_exp, TRIAL_DAYS
+            sub_status  = "free" if free else "trial"
+            sub_expires = trial_exp
+            sub_days    = 999 if free else TRIAL_DAYS
         else:
-            sub_status  = existing_sub.get("status", "none")
+            sub_status  = "free" if free else existing_sub.get("status", "none")
             sub_expires = existing_sub.get("expires_at")
-            sub_days    = sub_days_left(user_id)
+            sub_days    = 999 if free else sub_days_left(user_id)
     except Exception as e:
         print(f"Sub init error: {e}")
 
@@ -451,14 +507,13 @@ def auth():
 def health():
     return jsonify({
         "status":             "ok",
-        "app":                "مُلّاك 🏠",
+        "app":                "إدارة العقارات 🏠",
         "geidea_configured":  bool(GEIDEA_PUBLIC_KEY and GEIDEA_API_PASSWORD),
     })
 
 # ============================================================
 # 📊 Sessions
 # ============================================================
-# ✅ FIX #4: إضافة require_auth لـ session/end
 @app.route("/api/session/end", methods=["POST"])
 @require_auth
 def end_session(user):
@@ -469,7 +524,6 @@ def end_session(user):
         session_id = d.get("session_id", "")
         duration   = max(0, min(int(d.get("duration", 0)), 86400))
         if session_id:
-            # ✅ تأكد أن الجلسة تابعة للمستخدم نفسه
             sb_update("sessions",
                       {"id": f"eq.{session_id}", "user_id": f"eq.{user['user_id']}"},
                       {"ended_at": datetime.now(timezone.utc).isoformat(),
@@ -502,11 +556,14 @@ def session_ping(user):
 @rate_limit(max_calls=60, period=60)
 def get_properties(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
-        data = sb_select("properties", {"user_id": f"eq.{user['user_id']}"},
+        include_deleted = request.args.get("include_deleted", "false").lower() == "true"
+        filters = {"user_id": f"eq.{user['user_id']}"}
+        if not include_deleted:
+            filters["type"] = "neq.محذوف"
+        data = sb_select("properties", filters,
                          limit=limit, offset=offset)
         return jsonify(data)
     except Exception as e:
@@ -551,37 +608,20 @@ def edit_property(user, prop_id):
 @require_auth
 @require_write
 def delete_property(user, prop_id):
+    """حذف ناعم — يبقى العقار كـ'سابق' والبيانات المالية لا تُحذف"""
     try:
         uid = user["user_id"]
-        # ✅ FIX #13: حذف تتابعي — حذف الوحدات والمستأجرين والمصروفات المرتبطة
-        # أولاً: حذف المستأجرين المرتبطين
+        # حذف ناعم: تغيير النوع إلى "محذوف" مع الحفاظ على كل البيانات المالية
+        sb_update("properties",
+            {"id": f"eq.{prop_id}", "user_id": f"eq.{uid}"},
+            {"type": "محذوف"})
+        # تحرير الوحدات من المستأجرين لكن لا نحذف المستأجرين
         try:
-            tenants = sb_select("tenants",
-                {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
-            for t in tenants:
-                sb_delete("tenants",
-                    {"id": f"eq.{t['id']}", "user_id": f"eq.{uid}"})
-        except Exception as e:
-            print(f"⚠️ cascade delete tenants: {e}")
-
-        # ثانياً: حذف الوحدات المرتبطة
-        try:
-            sb_delete("units",
-                {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
-        except Exception as e:
-            print(f"⚠️ cascade delete units: {e}")
-
-        # ثالثاً: حذف المصروفات المرتبطة (أو إزالة الارتباط)
-        try:
-            sb_update("expenses",
+            sb_update("units",
                 {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"},
-                {"property_id": None, "unit_num": None})
+                {"tenant_name": None})
         except Exception as e:
-            print(f"⚠️ cascade unlink expenses: {e}")
-
-        # أخيراً: حذف العقار نفسه
-        sb_delete("properties",
-            {"id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
+            print(f"⚠️ unlink units: {e}")
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -596,7 +636,36 @@ def get_units(user):
         filters = {"user_id": f"eq.{user['user_id']}"}
         prop_id = request.args.get("property_id")
         if prop_id: filters["property_id"] = f"eq.{prop_id}"
-        return jsonify(sb_select("units", filters))
+        units = sb_select("units", filters)
+
+        # إضافة معلومات انتهاء العقد لكل وحدة
+        if prop_id:
+            tenants = sb_select("tenants", {
+                "user_id": f"eq.{user['user_id']}",
+                "property_id": f"eq.{prop_id}"
+            }, select="unit_num,name,end_date,checkout_time")
+            tenant_map = {}
+            for t in tenants:
+                tenant_map[t.get("unit_num")] = t
+
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            now_hour = datetime.now(timezone.utc).hour
+            for u in units:
+                t_info = tenant_map.get(u.get("unit_num"))
+                if t_info and t_info.get("end_date"):
+                    end_date = t_info["end_date"]
+                    co_time = t_info.get("checkout_time", "14:00")
+                    try:
+                        co_hour = int(co_time.split(":")[0])
+                    except Exception:
+                        co_hour = 14
+                    # إذا انتهى العقد، الوحدة متاحة
+                    if now_str > end_date or (now_str == end_date and now_hour >= co_hour):
+                        u["tenant_name"] = None
+                        u["expired"] = True
+                u["tenant_end_date"] = t_info["end_date"] if t_info else None
+
+        return jsonify(units)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -609,15 +678,12 @@ def add_unit(user):
         prop_id = d.get("property_id")
         if not prop_id:
             return jsonify({"error": "property_id مطلوب"}), 400
-
-        # ✅ FIX #12: التحقق من ملكية العقار
         prop_check = sb_select("properties", {
             "id": f"eq.{prop_id}",
             "user_id": f"eq.{user['user_id']}"
         })
         if not prop_check:
             return jsonify({"error": "العقار غير موجود أو لا يخصك"}), 403
-
         result = sb_insert("units", {
             "user_id":     str(user["user_id"]),
             "property_id": prop_id,
@@ -641,218 +707,10 @@ def delete_unit(user, unit_id):
 # ============================================================
 # 🧑‍💼 المستأجرون
 # ============================================================
-# ============================================================
-# ✨ Smart Tenant Preview
-# ============================================================
-def normalize_digits(text: str) -> str:
-    trans = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
-    return (text or "").translate(trans)
-
-def add_period(start_date: str, period: str, count: int) -> str:
-    d = datetime.fromisoformat(start_date)
-    if period == "يوم":
-        d = d + timedelta(days=count)
-    elif period == "شهر":
-        month = d.month - 1 + count
-        year = d.year + month // 12
-        month = month % 12 + 1
-        day = min(d.day, [31,29 if year%4==0 and (year%100!=0 or year%400==0) else 28,31,30,31,30,31,31,30,31,30,31][month-1])
-        d = d.replace(year=year, month=month, day=day)
-    else:
-        try:
-            d = d.replace(year=d.year + count)
-        except ValueError:
-            d = d.replace(month=2, day=28, year=d.year + count)
-    return d.date().isoformat()
-
-def period_label(period: str, count: int) -> str:
-    if period == "يوم":
-        return f"{count} {'يوم' if count == 1 else 'أيام'}"
-    if period == "شهر":
-        return f"{count} {'شهر' if count == 1 else 'أشهر'}"
-    return f"{count} {'سنة' if count == 1 else 'سنوات'}"
-
-def _free_units_for_property(user_id: str, property_id: str):
-    units = sb_select("units", {"user_id": f"eq.{user_id}", "property_id": f"eq.{property_id}"})
-    tenants = sb_select("tenants", {"user_id": f"eq.{user_id}", "property_id": f"eq.{property_id}"}, select="unit_num,end_date,checkout_time")
-    tenant_map = {str(t.get("unit_num")): t for t in tenants}
-    now = datetime.now(timezone.utc)
-    free = []
-    for u in units:
-        tenant_name = u.get("tenant_name")
-        t = tenant_map.get(str(u.get("unit_num")))
-        expired = False
-        if t and t.get("end_date"):
-            co_time = str(t.get("checkout_time") or "14:00")
-            try:
-                co_hour = int(co_time.split(":")[0])
-            except Exception:
-                co_hour = 14
-            if now.date().isoformat() > t["end_date"] or (now.date().isoformat() == t["end_date"] and now.hour >= co_hour):
-                expired = True
-        if not tenant_name or expired:
-            free.append(u)
-    return free
-
-@app.route("/api/smart/tenant/preview", methods=["POST"])
-@require_auth
-@require_write
-def smart_tenant_preview(user):
-    try:
-        raw_text = (request.json or {}).get("text", "")
-        text = normalize_digits(raw_text).strip()
-        if not text:
-            return jsonify({"error": "النص مطلوب"}), 400
-
-        props = sb_select("properties", {"user_id": f"eq.{user['user_id']}", "type": "neq.محذوف"})
-        preview = {
-            "name": "",
-            "phone": "",
-            "property_id": "",
-            "property_name": "",
-            "unit_num": None,
-            "unit_type": "",
-            "rent": 0,
-            "period": "شهر",
-            "period_count": 1,
-            "period_label": "1 شهر",
-            "start_date": datetime.now(timezone.utc).date().isoformat(),
-            "end_date": "",
-            "checkout_time": "14:00"
-        }
-        missing = []
-
-        # phone
-        m_phone = re.search(r'(?:\+966|0)?5\d{8}', text)
-        if m_phone:
-            phone = m_phone.group(0)
-            if phone.startswith('+966'):
-                phone = '0' + phone[4:]
-            preview["phone"] = phone
-
-        # checkout time
-        if re.search(r'12\s*(?::00)?', text):
-            preview["checkout_time"] = "12:00"
-        elif re.search(r'16\s*(?::00)?|4\s*(?::00)?', text):
-            preview["checkout_time"] = "16:00"
-        elif re.search(r'14\s*(?::00)?|2\s*(?::00)?', text):
-            preview["checkout_time"] = "14:00"
-
-        # period and count
-        m_period = re.search(r'(?:لمدة|مدة)?\s*(\d+)\s*(يوم|ايام|أيام|شهر|شهور|أشهر|سنة|سنوات)', text)
-        if m_period:
-            count = int(m_period.group(1))
-            word = m_period.group(2)
-            if word in ('يوم','ايام','أيام'):
-                period = 'يوم'
-            elif word in ('شهر','شهور','أشهر'):
-                period = 'شهر'
-            else:
-                period = 'سنة'
-            preview["period_count"] = max(1, count)
-            preview["period"] = period
-        else:
-            if 'يومي' in text:
-                preview["period"] = 'يوم'
-            elif 'سنوي' in text or 'سنة' in text or 'سنوات' in text:
-                preview["period"] = 'سنة'
-            else:
-                preview["period"] = 'شهر'
-            preview["period_count"] = 1
-        preview["period_label"] = period_label(preview["period"], preview["period_count"])
-        preview["end_date"] = add_period(preview["start_date"], preview["period"], preview["period_count"])
-
-        # property match
-        lowered = text.lower()
-        matched_props = [p for p in props if str(p.get('name','')).strip() and str(p.get('name','')).lower() in lowered]
-        if len(matched_props) == 1:
-            prop = matched_props[0]
-            preview["property_id"] = prop["id"]
-            preview["property_name"] = prop.get("name", "")
-        elif len(props) == 1:
-            prop = props[0]
-            preview["property_id"] = prop["id"]
-            preview["property_name"] = prop.get("name", "")
-        else:
-            missing.append("حدد اسم العقار")
-
-        # unit type/number
-        m_unit = re.search(r'(شقة|استديو|غرفة|استراحة|شاليه|فله|فيلا|الوحدة|وحدة)\s*(?:رقم)?\s*(\d+)', text)
-        if m_unit:
-            utype = m_unit.group(1)
-            if utype == 'فيلا':
-                utype = 'فله'
-            if utype in ('الوحدة','وحدة'):
-                utype = ''
-            preview["unit_type"] = utype
-            preview["unit_num"] = int(m_unit.group(2))
-
-        # name extraction
-        m_name = re.search(r'(?:على|باسم|للمستأجر|المستأجر)\s+([؀-ۿa-zA-Z ]{2,40})', text)
-        if m_name:
-            name = m_name.group(1)
-            name = re.split(r'(?:في|ب|بـ|لمدة|مدة|ريال|يوم|أيام|شهر|أشهر|سنة|سنوات)', name)[0].strip(' ،,.')
-            preview["name"] = name.strip()
-        if not preview["name"]:
-            missing.append("اسم المستأجر")
-
-        # rent extraction
-        m_rent = re.search(r'(?:ب|بـ|بقيمة|بمبلغ|إيجار|بسعر)\s*(\d{2,})', text)
-        if m_rent:
-            preview["rent"] = int(m_rent.group(1))
-        else:
-            nums = [int(n) for n in re.findall(r'\d+', text)]
-            used = set()
-            if preview["unit_num"] is not None:
-                used.add(preview["unit_num"])
-            used.add(preview["period_count"])
-            candidates = [n for n in nums if n not in used and n >= 50]
-            if candidates:
-                preview["rent"] = max(candidates)
-        if not preview["rent"]:
-            missing.append("مبلغ الإيجار")
-
-        # validate property/unit against free units
-        if preview["property_id"]:
-            free_units = _free_units_for_property(user["user_id"], preview["property_id"])
-            if preview["unit_num"] is None:
-                if len(free_units) == 1:
-                    preview["unit_num"] = free_units[0].get("unit_num")
-                    if not preview["unit_type"]:
-                        preview["unit_type"] = free_units[0].get("unit_type") or ""
-                else:
-                    missing.append("رقم الوحدة")
-            else:
-                unit = None
-                for u in free_units:
-                    if int(u.get("unit_num") or 0) == int(preview["unit_num"]):
-                        unit = u
-                        break
-                if not unit:
-                    missing.append("الوحدة غير متاحة أو غير موجودة")
-                else:
-                    if not preview["unit_type"]:
-                        preview["unit_type"] = unit.get("unit_type") or ""
-        else:
-            if preview["unit_num"] is None:
-                missing.append("رقم الوحدة")
-
-        # remove duplicates preserve order
-        dedup=[]
-        for m in missing:
-            if m not in dedup:
-                dedup.append(m)
-        missing=dedup
-
-        return jsonify({"ok": True, "preview": preview, "missing": missing})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route("/api/tenants", methods=["GET"])
 @require_auth
 def get_tenants(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
@@ -872,8 +730,6 @@ def add_tenant(user):
         d = request.json or {}
         if not d.get("name"):
             return jsonify({"error": "الاسم مطلوب"}), 400
-
-        # ✅ FIX #12: التحقق من ملكية العقار
         prop_id = d.get("property_id")
         if prop_id:
             prop_check = sb_select("properties", {
@@ -882,7 +738,6 @@ def add_tenant(user):
             })
             if not prop_check:
                 return jsonify({"error": "العقار غير موجود أو لا يخصك"}), 403
-
         row = {
             "user_id":      str(user["user_id"]),
             "name":         d.get("name", ""),
@@ -893,6 +748,7 @@ def add_tenant(user):
             "period":       d.get("period", "شهر"),
             "period_count": d.get("period_count", 1),
             "period_label": d.get("period_label", ""),
+            "checkout_time": d.get("checkout_time", "14:00"),
             "paid":         False
         }
         if d.get("start_date"): row["start_date"] = d["start_date"]
@@ -914,7 +770,7 @@ def edit_tenant(user, tenant_id):
     try:
         d       = request.json or {}
         allowed = ["name", "phone", "rent", "period", "period_count",
-                   "period_label", "start_date", "end_date", "paid"]
+                   "period_label", "start_date", "end_date", "checkout_time", "paid"]
         updates = {k: d[k] for k in allowed if k in d}
         result  = sb_update("tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"}, updates)
@@ -969,9 +825,30 @@ def pay_tenant(user, tenant_id):
 @require_auth
 @require_write
 def reset_tenants(user):
+    """إعادة ضبط كامل التطبيق — يحذف كل شيء"""
     try:
-        sb_update("tenants", {"user_id": f"eq.{user['user_id']}"}, {"paid": False})
-        return jsonify({"ok": True})
+        d = request.json or {}
+        pin = str(d.get("pin", "")).strip()
+        if not pin or len(pin) < 1 or len(pin) > 8 or not pin.isdigit():
+            return jsonify({"error": "الرمز يجب أن يكون من 1 إلى 8 أرقام"}), 400
+        if not (1 <= int(pin) <= 99999999):
+            return jsonify({"error": "رمز غير صالح"}), 400
+        # تحقق من الرمز الصحيح (آخر 4 أرقام من user_id مقلوبة + 1234)
+        # الرمز الثابت هو: 12345678
+        correct_pin = "12345678"
+        if pin != correct_pin:
+            return jsonify({"error": "الرمز غير صحيح"}), 403
+        uid = user["user_id"]
+        # حذف كل شيء
+        try: sb_delete("tenants",    {"user_id": f"eq.{uid}"})
+        except: pass
+        try: sb_delete("units",      {"user_id": f"eq.{uid}"})
+        except: pass
+        try: sb_delete("expenses",   {"user_id": f"eq.{uid}"})
+        except: pass
+        try: sb_delete("properties", {"user_id": f"eq.{uid}"})
+        except: pass
+        return jsonify({"ok": True, "message": "تم إعادة ضبط التطبيق بالكامل"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -982,7 +859,6 @@ def reset_tenants(user):
 @require_auth
 def get_expenses(user):
     try:
-        # ✅ FIX #14: Pagination
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
@@ -1014,6 +890,20 @@ def add_expense(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/expenses/<exp_id>", methods=["PUT"])
+@require_auth
+@require_write
+def edit_expense(user, exp_id):
+    try:
+        d = request.json or {}
+        allowed = ["category", "description", "amount", "property_id", "unit_num"]
+        updates = {k: d[k] for k in allowed if k in d}
+        result = sb_update("expenses",
+            {"id": f"eq.{exp_id}", "user_id": f"eq.{user['user_id']}"}, updates)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/expenses/<exp_id>", methods=["DELETE"])
 @require_auth
 @require_write
@@ -1032,7 +922,9 @@ def delete_expense(user, exp_id):
 def get_stats(user):
     try:
         uid      = user["user_id"]
+        # تشمل جميع العقارات (بما فيها المحذوفة) للإحصائيات المالية الدقيقة
         props    = sb_select("properties", {"user_id": f"eq.{uid}"})
+        active_props = [p for p in props if p.get("type") != "محذوف"]
         tenants  = sb_select("tenants",    {"user_id": f"eq.{uid}"})
         expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"})
         income   = sum(t["rent"] for t in tenants if t.get("paid"))
@@ -1040,7 +932,7 @@ def get_stats(user):
         man_exp  = sum(e.get("amount", 0) for e in expenses)
         total    = inv_exp + man_exp
         return jsonify({
-            "props":    len(props),
+            "props":    len(active_props),
             "tenants":  len(tenants),
             "income":   income,
             "expenses": total,
@@ -1056,17 +948,26 @@ def get_stats(user):
 @require_auth
 def subscription_status(user):
     try:
+        free = is_free_mode()
         sub = get_subscription(user["user_id"])
         if not sub:
-            return jsonify({"status": "none", "active": False, "days_left": 0})
+            return jsonify({
+                "status": "free" if free else "none",
+                "active": free,
+                "days_left": 999 if free else 0,
+                "free_mode": free,
+                "final_price": get_final_price(),
+            })
         active = sub_is_active(user["user_id"])
         days   = sub_days_left(user["user_id"])
         return jsonify({
-            "status":     sub.get("status", "none"),
-            "plan":       sub.get("plan", ""),
-            "active":     active,
-            "expires_at": sub.get("expires_at", ""),
-            "days_left":  days,
+            "status":      "free" if free else sub.get("status", "none"),
+            "plan":        sub.get("plan", ""),
+            "active":      active,
+            "expires_at":  sub.get("expires_at", ""),
+            "days_left":   999 if free else days,
+            "final_price": get_final_price(),
+            "free_mode":   free,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1075,11 +976,7 @@ def subscription_status(user):
 @app.route("/api/test/geidea", methods=["GET"])
 def test_geidea():
     if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
-        return jsonify({
-            "ok":   False,
-            "error": "GEIDEA_PUBLIC_KEY أو GEIDEA_API_PASSWORD غير مضبوط",
-        }), 400
-
+        return jsonify({"ok": False, "error": "GEIDEA_PUBLIC_KEY أو GEIDEA_API_PASSWORD غير مضبوط"}), 400
     if not RAILWAY_URL:
         return jsonify({"ok": False, "error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط"}), 400
 
@@ -1087,10 +984,12 @@ def test_geidea():
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
     merchant_ref = f"test_{int(time.time())}"
     timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+    # ✅ استخدام get_final_price() بدلاً من PLAN_MONTHLY_AMOUNT
+    final_price  = get_final_price()
+    signature    = geidea_signature(final_price, "SAR", merchant_ref, timestamp)
 
     payload = {
-        "amount":              PLAN_MONTHLY_AMOUNT,
+        "amount":              final_price,
         "currency":            "SAR",
         "timestamp":           timestamp,
         "merchantReferenceId": merchant_ref,
@@ -1101,26 +1000,18 @@ def test_geidea():
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
-
     try:
         resp = requests.post(url, json=payload, auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
             timeout=20)
         try:    body = resp.json()
         except: body = {"raw": resp.text[:1000]}
-
         checkout_url = extract_checkout_url(body)
-
-        return jsonify({
-            "ok":           resp.ok,
-            "status_code":  resp.status_code,
-            "checkout_url": checkout_url,
-        })
-
+        return jsonify({"ok": resp.ok, "status_code": resp.status_code, "checkout_url": checkout_url, "body": body})
     except requests.exceptions.Timeout:
-        return jsonify({"ok": False, "error": "Timeout — تحقق من GEIDEA_BASE_URL"}), 502
+        return jsonify({"ok": False, "error": "Timeout"}), 502
     except requests.exceptions.ConnectionError:
-        return jsonify({"ok": False, "error": "Connection error — تحقق من GEIDEA_BASE_URL"}), 502
+        return jsonify({"ok": False, "error": "Connection error"}), 502
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -1136,14 +1027,16 @@ def create_checkout(user):
     if not RAILWAY_URL:
         return jsonify({"error": "RAILWAY_PUBLIC_DOMAIN غير مضبوط"}), 500
 
+    # ✅ استخدام get_final_price() — يشمل الخصم إن وُجد
+    final_price  = get_final_price()
     merchant_ref = f"mullak_{user['user_id']}_{int(time.time())}"
     callback_url = f"https://{RAILWAY_URL}/api/subscription/callback"
     return_url   = MINI_APP_URL.rstrip("/") + "/?payment=done"
     timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-    signature    = geidea_signature(PLAN_MONTHLY_AMOUNT, "SAR", merchant_ref, timestamp)
+    signature    = geidea_signature(final_price, "SAR", merchant_ref, timestamp)
 
     payload = {
-        "amount":              PLAN_MONTHLY_AMOUNT,
+        "amount":              final_price,
         "currency":            "SAR",
         "timestamp":           timestamp,
         "merchantReferenceId": merchant_ref,
@@ -1154,42 +1047,35 @@ def create_checkout(user):
     }
 
     url = f"{GEIDEA_BASE_URL}/payment-intent/api/v2/direct/session"
-    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}")
+    print(f"📤 Geidea checkout: user={user['user_id']}, ref={merchant_ref}, amount={final_price}")
 
     try:
         resp = requests.post(url, json=payload, auth=geidea_auth(),
             headers={"Accept": "application/json", "Content-Type": "application/json"},
             timeout=20)
-
         try:    resp_data = resp.json()
         except: resp_data = {"raw": resp.text[:1000]}
-
         print(f"📩 Geidea: status={resp.status_code}")
-
         if not resp.ok:
             error_msg = (resp_data.get("responseMessage") or
                          resp_data.get("message") or
                          f"خطأ {resp.status_code} من بوابة الدفع")
             return jsonify({"error": error_msg}), 502
-
         payment_url = extract_checkout_url(resp_data)
         if not payment_url:
             return jsonify({"error": "لم يُعثر على رابط الدفع في رد Geidea"}), 502
-
         try:
             sb_insert("payment_orders", {
                 "user_id":    str(user["user_id"]),
                 "order_id":   merchant_ref,
-                "amount":     PLAN_MONTHLY_AMOUNT,
+                "amount":     final_price,
                 "status":     "pending",
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
         except Exception as e:
             print(f"⚠️ payment_orders (non-critical): {e}")
-
         print(f"✅ payment_url: {payment_url}")
         return jsonify({"payment_url": payment_url, "order_id": merchant_ref})
-
     except requests.exceptions.Timeout:
         return jsonify({"error": "انتهت مهلة الاتصال ببوابة الدفع"}), 502
     except requests.exceptions.ConnectionError:
@@ -1201,12 +1087,9 @@ def create_checkout(user):
 
 @app.route("/api/subscription/callback", methods=["POST"])
 def payment_callback():
-    """✅ FIX #1: Geidea callback مع التحقق من الأصالة"""
     try:
         data = request.json or {}
         print(f"📩 Geidea Callback received")
-
-        # ✅ FIX #1: تحقق من أصالة الـ callback
         if not verify_geidea_callback_signature(data):
             print("❌ Callback signature verification FAILED")
             return jsonify({"error": "unauthorized", "processed": False}), 403
@@ -1224,11 +1107,9 @@ def payment_callback():
         ).strip()
 
         print(f"    status={status!r}, ref={merchant_ref!r}")
-
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if status not in SUCCESS_CODES:
             return jsonify({"ok": True, "processed": False, "status": status}), 200
-
         if not merchant_ref.startswith("mullak_"):
             return jsonify({"ok": True, "processed": False, "reason": "unknown ref"}), 200
 
@@ -1247,7 +1128,6 @@ def payment_callback():
                 base = now_utc
 
         new_expires = (base + timedelta(days=PLAN_MONTHLY_DAYS)).isoformat()
-
         if existing:
             sb_update("subscriptions", {"user_id": f"eq.{user_id}"}, {
                 "plan": "monthly", "status": "active",
@@ -1269,16 +1149,15 @@ def payment_callback():
             if bot:
                 bot.send_message(int(user_id),
                     f"🎉 *تم تفعيل اشتراكك بنجاح!*\n\n"
-                    f"✅ الخطة الشهرية — {int(PLAN_MONTHLY_AMOUNT)} ريال\n"
+                    f"✅ الخطة الشهرية — {int(get_final_price())} ريال\n"
                     f"📅 تنتهي في: {new_expires[:10]}\n\n"
-                    f"استمتع بجميع مميزات مُلّاك 🏠",
+                    f"استمتع بجميع مميزات إدارة العقارات 🏠",
                     parse_mode="Markdown")
         except Exception as e:
             print(f"⚠️ Telegram notify: {e}")
 
         print(f"✅ اشتراك مُفعَّل: user={user_id}, expires={new_expires}")
         return jsonify({"ok": True, "processed": True})
-
     except Exception as e:
         print(f"❌ Callback error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1290,7 +1169,6 @@ def verify_payment(user, order_id):
     try:
         if not GEIDEA_PUBLIC_KEY or not GEIDEA_API_PASSWORD:
             return jsonify({"error": "بوابة الدفع غير مضبوطة"}), 500
-
         resp = requests.get(
             f"{GEIDEA_BASE_URL}/payment-intent/api/v2/order",
             params={"merchantReferenceId": order_id},
@@ -1298,16 +1176,13 @@ def verify_payment(user, order_id):
             headers={"Accept": "application/json"},
             timeout=15
         )
-
         if not resp.ok:
             return jsonify({"error": f"خطأ {resp.status_code} من Geidea"}), 502
-
         data         = resp.json()
         order_status = str(
             data.get("status") or
             (data.get("order") or {}).get("status") or ""
         ).lower()
-
         SUCCESS_CODES = {"success", "000", "paid", "captured", "approved"}
         if order_status in SUCCESS_CODES:
             uid      = user["user_id"]
@@ -1330,14 +1205,12 @@ def verify_payment(user, order_id):
                     "expires_at": new_exp, "created_at": now_utc.isoformat()
                 })
             return jsonify({"paid": True, "expires_at": new_exp})
-
         return jsonify({"paid": False, "status": order_status})
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ============================================================
-# 📄 تقرير PDF — ✅ FIX #2: XSS Protection
+# 📄 تقرير PDF
 # ============================================================
 @app.route("/api/report/print", methods=["GET"])
 @require_auth
@@ -1359,7 +1232,6 @@ def print_report(user):
         today   = datetime.now().strftime("%Y/%m/%d")
         fmt     = lambda n: f"{int(n or 0):,}"
 
-        # ✅ كل القيم تمر عبر esc() لمنع XSS
         tenants_rows = ""
         for t in tenants:
             color  = "#10b981" if t.get("paid") else "#ef4444"
@@ -1392,7 +1264,7 @@ def print_report(user):
 
         html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-<title>تقرير مُلّاك — {today}</title>
+<title>تقرير إدارة العقارات — {today}</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a2e;direction:rtl;font-size:13px}}
@@ -1412,7 +1284,7 @@ tr:nth-child(even) td{{background:#f8fafc}}
 @media print{{body{{font-size:11px}}}}
 </style></head><body>
 <div class="header">
-  <div><div class="logo">مُلّ<span>اك</span></div><div style="font-size:13px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
+  <div><div class="logo">إدارة <span>العقارات</span></div><div style="font-size:13px;margin-top:4px;opacity:.7">نظام إدارة العقارات الذكي</div></div>
   <div style="text-align:left;font-size:12px;opacity:.8">
     <div style="font-size:14px;font-weight:700;margin-bottom:4px">التقرير المالي الشامل</div>
     <div>المستخدم: {fname}</div><div>التاريخ: {today}</div>
@@ -1436,7 +1308,7 @@ tr:nth-child(even) td{{background:#f8fafc}}
 <table><tr><th>التصنيف</th><th>الوصف</th><th>العقار</th><th>المبلغ</th></tr>
 {expenses_rows or '<tr><td colspan="4" style="text-align:center;color:#64748b">لا توجد مصروفات</td></tr>'}
 <tr style="background:#fef3c7;font-weight:800"><td colspan="3" style="text-align:center">إجمالي المصروفات</td><td style="color:#ef4444">{fmt(total_e)} ريال</td></tr></table></div>
-<div class="footer">تم إنشاء هذا التقرير بواسطة نظام مُلّاك — {today}</div>
+<div class="footer">تم إنشاء هذا التقرير بواسطة نظام إدارة العقارات — {today}</div>
 <script>window.onload=function(){{window.print()}}</script>
 </body></html>"""
 
@@ -1447,29 +1319,112 @@ tr:nth-child(even) td{{background:#f8fafc}}
 # ============================================================
 # 🔔 التذكيرات اليومية
 # ============================================================
+def auto_checkout_expired_tenants():
+    """تحرير الوحدات عند انتهاء عقد المستأجر تلقائياً"""
+    if not SUPABASE_URL:
+        return
+    print("🔄 فحص العقود المنتهية...")
+    try:
+        now_utc = datetime.now(timezone.utc)
+        today_str = now_utc.strftime("%Y-%m-%d")
+        current_hour = now_utc.hour
+
+        all_tenants = sb_select("tenants", select="*")
+        for t in all_tenants:
+            end_date = t.get("end_date")
+            if not end_date:
+                continue
+            checkout_time = t.get("checkout_time", "14:00")
+            try:
+                checkout_hour = int(checkout_time.split(":")[0])
+            except Exception:
+                checkout_hour = 14
+
+            # تحقق هل تجاوزنا تاريخ ووقت الخروج
+            if today_str > end_date or (today_str == end_date and current_hour >= checkout_hour):
+                # تحرير الوحدة
+                try:
+                    sb_update("units",
+                        {"property_id": f"eq.{t['property_id']}",
+                         "unit_num":    f"eq.{t['unit_num']}",
+                         "user_id":     f"eq.{t['user_id']}"},
+                        {"tenant_name": None})
+                    print(f"  ✅ تم تحرير وحدة {t['unit_num']} — {t['name']} (انتهى {end_date} @ {checkout_time})")
+                except Exception as e:
+                    print(f"  ⚠️ تحرير وحدة: {e}")
+    except Exception as e:
+        print(f"❌ auto_checkout: {e}")
+
 def send_daily_reminders():
+    """تذكير تلقائي — يتحقق من دورة كل مستأجر ويرسل تذكيراً شهرياً من يوم الدخول"""
     if not BOT_TOKEN or not SUPABASE_URL:
         return
-    print("🔔 تشغيل التذكيرات اليومية...")
+    print("🔔 تشغيل التذكيرات اليومية + التصفير التلقائي...")
     try:
-        all_tenants = sb_select("tenants", {"paid": "eq.false"},
-            select="user_id,name,unit_num,rent,period_label,properties(name)")
+        all_tenants = sb_select("tenants",
+            select="*,properties(name)")
         if not all_tenants:
             return
-        users_data = {}
+
+        now = datetime.now(timezone.utc)
+        today_day = now.day
+        today_str = now.strftime("%Y-%m-%d")
+
         for t in all_tenants:
+            # تصفير تلقائي: إذا اليوم = يوم بداية العقد في الشهر → أعد paid=false
+            start = t.get("start_date")
+            if start and t.get("paid"):
+                try:
+                    start_dt = datetime.strptime(start, "%Y-%m-%d")
+                    period = t.get("period", "شهر")
+                    # تحقق هل بدأت دورة دفع جديدة
+                    should_reset = False
+                    if period == "يوم":
+                        # يومي: يُصفّر كل يوم
+                        should_reset = True
+                    elif period == "شهر":
+                        # شهري: يُصفّر في نفس يوم الدخول كل شهر
+                        if today_day == start_dt.day:
+                            should_reset = True
+                    elif period == "سنة":
+                        # سنوي: يُصفّر في نفس اليوم والشهر كل سنة
+                        if today_day == start_dt.day and now.month == start_dt.month:
+                            should_reset = True
+
+                    # لا نصفّر إذا تجاوزنا تاريخ النهاية
+                    end_date = t.get("end_date")
+                    if end_date and today_str > end_date:
+                        should_reset = False
+
+                    if should_reset:
+                        sb_update("tenants",
+                            {"id": f"eq.{t['id']}", "user_id": f"eq.{t['user_id']}"},
+                            {"paid": False})
+                        print(f"  🔄 تصفير تلقائي: {t['name']} (دورة {period})")
+                except Exception as e:
+                    print(f"  ⚠️ auto-reset: {e}")
+
+        # بعد التصفير، اجلب المستأجرين غير الدافعين
+        unpaid = sb_select("tenants", {"paid": "eq.false"},
+            select="user_id,name,unit_num,rent,period_label,properties(name)")
+        if not unpaid:
+            return
+
+        users_data = {}
+        for t in unpaid:
             uid = t.get("user_id")
             if uid: users_data.setdefault(uid, []).append(t)
-        for user_id, unpaid in users_data.items():
-            total = sum(t.get("rent", 0) for t in unpaid)
+
+        for user_id, tenant_list in users_data.items():
+            total = sum(t.get("rent", 0) for t in tenant_list)
             lines = []
-            for t in unpaid[:10]:
+            for t in tenant_list[:10]:
                 prop = (t.get("properties") or {}).get("name", "")
                 lines.append(f"• *{t['name']}* — {prop} — وحدة {t.get('unit_num','')} — {int(t.get('rent',0)):,} ريال")
-            if len(unpaid) > 10:
-                lines.append(f"_... و {len(unpaid)-10} آخرين_")
-            msg  = f"🔔 *تذكير يومي — مُلّاك*\n\n"
-            msg += f"لديك *{len(unpaid)}* مستأجر لم يدفع:\n\n"
+            if len(tenant_list) > 10:
+                lines.append(f"_... و {len(tenant_list)-10} آخرين_")
+            msg  = f"🔔 *تذكير — إدارة العقارات*\n\n"
+            msg += f"لديك *{len(tenant_list)}* مستأجر لم يدفع:\n\n"
             msg += "\n".join(lines)
             msg += f"\n\n💰 *إجمالي المتأخر: {total:,} ريال*"
             msg += "\n\nافتح التطبيق لتسجيل الدفعات 👇"
@@ -1483,18 +1438,17 @@ def send_daily_reminders():
         print(f"❌ التذكيرات: {e}")
 
 # ============================================================
-# 🤖 تيليجرام بوت — ✅ FIX #9: Webhook Secret
+# 🤖 تيليجرام بوت
 # ============================================================
 def app_keyboard():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(
-        text="🏠 فتح تطبيق مُلّاك",
+        text="🏠 فتح تطبيق إدارة العقارات",
         web_app=WebAppInfo(url=MINI_APP_URL)
     ))
     return markup
 
 if bot:
-    # ✅ FIX #9: استخدام WEBHOOK_SECRET بدلاً من BOT_TOKEN في URL
     @app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
     def webhook():
         if request.headers.get("content-type") == "application/json":
@@ -1506,7 +1460,7 @@ if bot:
     def start(msg):
         name = msg.from_user.first_name
         bot.send_message(msg.chat.id,
-            f"🏠 *أهلاً {name} في مُلّاك!*\n\nنظام إدارة عقاراتك الذكي 🤖\n\nاضغط الزر أدناه لفتح التطبيق 👇",
+            f"🏠 *أهلاً {name} في إدارة العقارات!*\n\nنظام إدارة عقاراتك الذكي 🤖\n\nاضغط الزر أدناه لفتح التطبيق 👇",
             parse_mode="Markdown", reply_markup=app_keyboard())
 
     @bot.message_handler(commands=["stats"])
@@ -1541,7 +1495,7 @@ if bot:
             elif pct(lt1) >= 60: rating = "⚠️ أغلب المستخدمين يخرجون سريعاً — راجع تجربة المستخدم"
             else:                rating = "✅ التطبيق يعمل بشكل جيد"
             text = (
-                f"📊 *إحصائيات مُلّاك*\n━━━━━━━━━━━━━━━━━\n"
+                f"📊 *إحصائيات إدارة العقارات*\n━━━━━━━━━━━━━━━━━\n"
                 f"👥 المستخدمون: `{total_users}` | 📱 الجلسات: `{total_sessions}`\n"
                 f"🔁 الراجعون: `{returning}` ({pct_ret}%)\n"
                 f"⏱️ متوسط الاستخدام: `{avg_sec//60}:{avg_sec%60:02d}` دقيقة\n━━━━━━━━━━━━━━━━━\n"
@@ -1553,6 +1507,123 @@ if bot:
         except Exception as e:
             bot.send_message(msg.chat.id, f"❌ خطأ: `{e}`", parse_mode="Markdown")
 
+    # ============================================================
+    # 💰 أوامر المدير — السعر والخصم
+    # ============================================================
+    @bot.message_handler(commands=["show_price"])
+    def show_price_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        base     = get_monthly_price()
+        discount = get_discount_percent()
+        final    = get_final_price()
+        text = (
+            f"💳 *إعدادات الاشتراك الحالية*\n\n"
+            f"💰 السعر الأساسي: `{base}` ريال\n"
+            f"🏷️ الخصم الحالي: `{discount}%`\n"
+            f"✅ السعر النهائي: `{final}` ريال"
+        )
+        bot.reply_to(msg, text, parse_mode="Markdown")
+
+    @bot.message_handler(commands=["price"])
+    def set_price_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        parts = (msg.text or "").split()
+        if len(parts) != 2:
+            return bot.reply_to(msg, "📌 الاستخدام الصحيح:\n/price 39")
+        try:
+            new_price = float(parts[1])
+            if new_price < 0:
+                return bot.reply_to(msg, "❌ السعر يجب أن يكون 0 أو أكثر")
+            set_setting("plan_monthly_amount", new_price)
+            final = get_final_price()
+            bot.reply_to(msg,
+                f"✅ *تم تحديث السعر*\n\n"
+                f"💰 السعر الجديد: `{new_price}` ريال\n"
+                f"🏷️ الخصم الحالي: `{get_discount_percent()}%`\n"
+                f"✅ السعر النهائي: `{final}` ريال",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["discount"])
+    def set_discount_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        parts = (msg.text or "").split()
+        if len(parts) != 2:
+            return bot.reply_to(msg, "📌 الاستخدام الصحيح:\n/discount 20")
+        try:
+            percent = float(parts[1])
+            if percent < 0 or percent > 100:
+                return bot.reply_to(msg, "❌ الخصم يجب أن يكون بين 0 و100")
+            set_setting("discount_percent", percent)
+            final = get_final_price()
+            bot.reply_to(msg,
+                f"✅ *تم تطبيق الخصم*\n\n"
+                f"💰 السعر الأساسي: `{get_monthly_price()}` ريال\n"
+                f"🏷️ الخصم الجديد: `{percent}%`\n"
+                f"✅ السعر النهائي: `{final}` ريال",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["discount_off"])
+    def discount_off_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("discount_percent", 0)
+            bot.reply_to(msg,
+                f"✅ *تم إلغاء الخصم*\n\n"
+                f"💰 السعر الحالي: `{get_monthly_price()}` ريال (بدون خصم)",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    # ============================================================
+    # 🆓 أوامر المدير — الوضع المجاني
+    # ============================================================
+    @bot.message_handler(commands=["free_on"])
+    def free_on_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("free_mode", "on")
+            bot.reply_to(msg,
+                "✅ *تم تفعيل الوضع المجاني*\n\n"
+                "🆓 جميع المستخدمين يمكنهم استخدام التطبيق مجاناً\n"
+                "📌 لإيقافه: /free_off",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["free_off"])
+    def free_off_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        try:
+            set_setting("free_mode", "off")
+            bot.reply_to(msg,
+                "🔒 *تم إيقاف الوضع المجاني*\n\n"
+                "💳 المستخدمون يحتاجون اشتراك فعّال للكتابة\n"
+                "📌 لتفعيله: /free_on",
+                parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(msg, f"❌ خطأ: {e}")
+
+    @bot.message_handler(commands=["free_status"])
+    def free_status_cmd(msg):
+        if str(msg.from_user.id) != str(ADMIN_ID):
+            return bot.reply_to(msg, "⛔ هذا الأمر للمدير فقط")
+        status = "🆓 مفعّل" if is_free_mode() else "🔒 متوقف"
+        bot.reply_to(msg,
+            f"📌 *حالة الوضع المجاني:* {status}\n\n"
+            f"• /free\\_on — تفعيل المجاني\n"
+            f"• /free\\_off — إيقاف المجاني",
+            parse_mode="Markdown")
+
     @bot.message_handler(func=lambda m: not (m.text or "").startswith("/"))
     def default(msg):
         bot.send_message(msg.chat.id, "👋 اضغط الزر لفتح التطبيق", reply_markup=app_keyboard())
@@ -1561,7 +1632,6 @@ if bot:
 def set_webhook():
     if not RAILWAY_URL:
         return jsonify({"error": "أضف RAILWAY_PUBLIC_DOMAIN في Variables"}), 400
-    # ✅ FIX #9: استخدام WEBHOOK_SECRET
     url = f"https://{RAILWAY_URL}/webhook/{WEBHOOK_SECRET}"
     if bot:
         bot.remove_webhook()
@@ -1576,8 +1646,9 @@ if __name__ == "__main__":
     if BOT_TOKEN:
         scheduler = BackgroundScheduler(timezone="UTC")
         scheduler.add_job(send_daily_reminders, "cron", hour=6, minute=0, id="daily")
+        scheduler.add_job(auto_checkout_expired_tenants, "cron", minute="*/30", id="auto_checkout")
         scheduler.start()
-        print("✅ جدولة التذكيرات اليومية تعمل")
+        print("✅ جدولة التذكيرات اليومية + الخروج التلقائي تعمل")
 
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 تشغيل على المنفذ {port}")
