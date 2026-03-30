@@ -1,0 +1,1997 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>إدارة العقارات</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0e1a; --surface:#111827; --card:#1a2235; --border:#1e2d45;
+    --accent:#3b82f6; --green:#10b981; --red:#ef4444;
+    --gold:#f59e0b; --purple:#8b5cf6; --teal:#14b8a6;
+    --text:#f1f5f9; --muted:#64748b; --radius:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;overflow-x:hidden;}
+  .screen{display:none;flex-direction:column;min-height:100vh;}
+  .screen.active{display:flex;}
+  #splash{align-items:center;justify-content:center;background:linear-gradient(135deg,#0a0e1a,#0f172a);}
+  .splash-logo{font-size:72px;font-weight:800;color:var(--accent);letter-spacing:-3px;animation:pulse 1.5s ease-in-out infinite;}
+  .splash-logo span{color:var(--green);}
+  .splash-sub{font-size:15px;color:var(--muted);margin-top:8px;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .header{background:var(--surface);padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;}
+  .header-title{font-size:16px;font-weight:700;}
+  .back-btn{width:36px;height:36px;background:var(--card);border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;}
+  .pdf-btn{display:flex;align-items:center;gap:5px;padding:7px 14px;background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+  .home-header{background:linear-gradient(135deg,#1e3a5f,#1a2235);padding:20px 20px 60px;}
+  .home-greeting{font-size:13px;color:var(--muted);margin-bottom:4px;}
+  .home-name{font-size:22px;font-weight:800;}
+  .stats-container{padding:0 16px;margin-top:-44px;margin-bottom:20px;}
+  .stats-row{display:grid;gap:10px;margin-bottom:10px;}
+  .stats-row.two{grid-template-columns:1fr 1fr;}
+  .stats-row.three{grid-template-columns:1fr 1fr 1fr;}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 12px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.3);}
+  .stat-num{font-size:18px;font-weight:800;margin-bottom:3px;}
+  .stat-label{font-size:10px;color:var(--muted);}
+  .stat-card.green .stat-num{color:var(--green);}
+  .stat-card.blue .stat-num{color:var(--accent);}
+  .stat-card.red .stat-num{color:var(--red);}
+  .stat-card.gold .stat-num{color:var(--gold);}
+  .stat-card.teal .stat-num{color:var(--teal);}
+  .section-title{font-size:13px;font-weight:700;color:var(--muted);padding:0 20px;margin-bottom:12px;letter-spacing:.5px;text-transform:uppercase;}
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px;margin-bottom:20px;}
+  .menu-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+  .menu-card::before{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:0 var(--radius) 0 60px;opacity:.08;}
+  .menu-card.blue::before{background:var(--accent);}
+  .menu-card.green::before{background:var(--green);}
+  .menu-card.purple::before{background:var(--purple);}
+  .menu-card.gold::before{background:var(--gold);}
+  .menu-card.red::before{background:var(--red);}
+  .menu-card.teal::before{background:var(--teal);}
+  .menu-card.orange::before{background:#f97316;}
+  .menu-card:active{transform:scale(.97);}
+  .menu-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px;}
+  .menu-card.blue .menu-icon{background:rgba(59,130,246,.15);}
+  .menu-card.green .menu-icon{background:rgba(16,185,129,.15);}
+  .menu-card.purple .menu-icon{background:rgba(139,92,246,.15);}
+  .menu-card.gold .menu-icon{background:rgba(245,158,11,.15);}
+  .menu-card.red .menu-icon{background:rgba(239,68,68,.15);}
+  .menu-card.teal .menu-icon{background:rgba(20,184,166,.15);}
+  .menu-card.orange .menu-icon{background:rgba(249,115,22,.15);}
+  .menu-label{font-size:13px;font-weight:700;margin-bottom:2px;}
+  .menu-sub{font-size:11px;color:var(--muted);}
+  .menu-card.full{grid-column:span 2;display:flex;align-items:center;gap:14px;}
+  .menu-card.full .menu-icon{margin-bottom:0;}
+  .form-body{padding:20px 16px;flex:1;}
+  .form-group{margin-bottom:16px;}
+  .form-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;display:block;letter-spacing:.5px;text-transform:uppercase;}
+  .form-input{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--text);font-family:inherit;font-size:15px;outline:none;direction:rtl;transition:border-color .2s;}
+  .form-input:focus{border-color:var(--accent);}
+  .form-input::placeholder{color:var(--muted);}
+  input[type="date"].form-input{color-scheme:dark;}
+  .submit-btn{width:100%;padding:16px;border-radius:14px;border:none;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;transition:all .2s;margin-top:8px;}
+  .submit-btn.blue{background:var(--accent);color:#fff;}
+  .submit-btn.green{background:var(--green);color:#fff;}
+  .submit-btn.red{background:var(--red);color:#fff;}
+  .submit-btn.orange{background:#f97316;color:#fff;}
+  .submit-btn.outline{background:transparent;border:2px solid var(--border);color:var(--muted);}
+  .submit-btn:active{transform:scale(.98);opacity:.9;}
+  .submit-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+  .period-tabs-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .period-tabs-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .tab-btn{padding:11px 6px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;}
+  .tab-btn.active-day{border-color:var(--green);background:rgba(16,185,129,.1);color:var(--green);}
+  .tab-btn.active-month{border-color:var(--accent);background:rgba(59,130,246,.1);color:var(--accent);}
+  .tab-btn.active-annual{border-color:var(--gold);background:rgba(245,158,11,.1);color:var(--gold);}
+  .months-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;}
+  .month-btn{padding:10px 4px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;}
+  .month-btn.selected{border-color:var(--accent);background:rgba(59,130,246,.15);color:var(--accent);}
+  .role-card{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:20px 16px;margin-bottom:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:16px;}
+  .role-card:active{transform:scale(.99);}
+  .role-card.owner-role{border-right:4px solid var(--accent);}
+  .role-card.investor-role{border-right:4px solid var(--gold);}
+  .role-icon{font-size:36px;}
+  .role-info{flex:1;}
+  .role-name{font-size:16px;font-weight:700;margin-bottom:4px;}
+  .role-desc{font-size:12px;color:var(--muted);}
+  .role-arrow{font-size:18px;color:var(--muted);}
+  .unit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 20px;}
+  .unit-card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:18px 14px;text-align:center;cursor:pointer;transition:all .2s;}
+  .unit-card:active{transform:scale(.97);}
+  .unit-icon{font-size:32px;margin-bottom:8px;}
+  .unit-label{font-size:13px;font-weight:700;}
+  .list-body{padding:16px;flex:1;}
+  .list-item{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;transition:all .2s;}
+  .list-item-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+  .list-item-icon.blue{background:rgba(59,130,246,.15);}
+  .list-item-icon.green{background:rgba(16,185,129,.15);}
+  .list-item-icon.gold{background:rgba(245,158,11,.15);}
+  .list-item-icon.red{background:rgba(239,68,68,.15);}
+  .list-item-icon.teal{background:rgba(20,184,166,.15);}
+  .list-item-info{flex:1;min-width:0;}
+  .list-item-name{font-size:15px;font-weight:700;margin-bottom:3px;}
+  .list-item-sub{font-size:11px;color:var(--muted);line-height:1.7;}
+  .list-item-badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;}
+  .badge-green{background:rgba(16,185,129,.15);color:var(--green);}
+  .badge-red{background:rgba(239,68,68,.15);color:var(--red);}
+  .badge-gold{background:rgba(245,158,11,.15);color:var(--gold);}
+  .badge-blue{background:rgba(59,130,246,.15);color:var(--accent);}
+  .action-btns{display:flex;gap:6px;flex-shrink:0;}
+  .action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .2s;}
+  .action-btn.edit{background:rgba(59,130,246,.15);color:var(--accent);}
+  .action-btn.del{background:rgba(239,68,68,.15);color:var(--red);}
+  .action-btn:active{transform:scale(.9);}
+  .expiry-badge{padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;}
+  .expiry-ok{background:rgba(16,185,129,.15);color:var(--green);}
+  .expiry-soon{background:rgba(245,158,11,.15);color:var(--gold);}
+  .expiry-expired{background:rgba(239,68,68,.15);color:var(--red);}
+  .prop-select-list{padding:16px;}
+  .prop-select-item{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px;}
+  .prop-select-item:active{transform:scale(.99);border-color:var(--accent);}
+  .report-summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px;}
+  .report-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;}
+  .report-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;}
+  .report-value{font-size:22px;font-weight:800;}
+  .report-value.green{color:var(--green);}
+  .report-value.red{color:var(--red);}
+  .report-value.gold{color:var(--gold);}
+  .report-value.teal{color:var(--teal);}
+  .prop-report-card{background:var(--card);border:1px solid var(--border);border-radius:14px;margin:0 16px 12px;overflow:hidden;}
+  .prop-report-header{background:linear-gradient(135deg,#1e3a5f,#1a2235);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;}
+  .prop-report-body{padding:14px 16px;}
+  .prop-financial-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+  .prop-fin-item{text-align:center;background:var(--surface);border-radius:10px;padding:10px 6px;}
+  .prop-fin-val{font-size:16px;font-weight:800;margin-bottom:3px;}
+  .prop-fin-label{font-size:10px;color:var(--muted);}
+  .unit-row{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:8px;}
+  .unit-fin-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;}
+  .unit-fin-cell{text-align:center;background:var(--card);border-radius:8px;padding:7px 4px;}
+  .unit-fin-val{font-size:13px;font-weight:800;}
+  .unit-fin-lbl{font-size:9px;color:var(--muted);}
+  .section-divider{padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:8px;}
+  .section-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  .note-box{border-radius:12px;padding:14px;margin-bottom:16px;}
+  .note-box.gold{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);}
+  .note-box.blue{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);}
+  .note-box.green{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);}
+  .note-title{font-size:12px;font-weight:700;margin-bottom:4px;}
+  .note-box.gold .note-title{color:var(--gold);}
+  .note-box.blue .note-title{color:var(--accent);}
+  .note-box.green .note-title{color:var(--green);}
+  .note-text{font-size:12px;color:var(--muted);}
+  .cat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px;}
+  .cat-btn{padding:10px 4px;border-radius:10px;border:2px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;line-height:1.4;}
+  .cat-btn.selected{border-color:var(--red);background:rgba(239,68,68,.1);color:var(--red);}
+  .success-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;}
+  .success-icon{font-size:72px;margin-bottom:20px;animation:bounceIn .5s ease;}
+  .success-title{font-size:22px;font-weight:800;margin-bottom:8px;}
+  .success-sub{font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.8;white-space:pre-line;}
+  @keyframes bounceIn{0%{transform:scale(0);opacity:0}60%{transform:scale(1.2)}100%{transform:scale(1);opacity:1}}
+  .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted);font-size:14px;gap:8px;}
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:56px;margin-bottom:16px;opacity:.5;}
+  .empty-text{font-size:15px;}
+  .bottom-safe{height:env(safe-area-inset-bottom,16px);}
+  ::-webkit-scrollbar{width:0;}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#1e2d45;border:1px solid var(--border);border-radius:14px;padding:14px 20px;font-size:13px;font-weight:600;z-index:9999;transition:transform .3s,opacity .3s;opacity:0;max-width:90vw;text-align:center;pointer-events:none;}
+  #toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+  #toast.error{border-color:var(--red);color:var(--red);}
+  #toast.success{border-color:var(--green);color:var(--green);}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:6px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);}
+  .confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;}
+  .confirm-title{font-size:17px;font-weight:800;margin-bottom:8px;text-align:center;}
+  .confirm-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px;line-height:1.6;}
+  /* ====== Onboarding ====== */
+  .ob-progress{display:flex;gap:6px;padding:20px 24px 0;}
+  .ob-step{flex:1;height:4px;border-radius:4px;background:var(--border);transition:background .4s;}
+  .ob-step.done{background:var(--green);}
+  .ob-step.active{background:var(--accent);}
+  .ob-body{flex:1;display:flex;flex-direction:column;padding:24px 20px;overflow-y:auto;}
+  .ob-emoji{font-size:64px;text-align:center;margin-bottom:16px;}
+  .ob-title{font-size:24px;font-weight:800;text-align:center;margin-bottom:8px;line-height:1.3;}
+  .ob-sub{font-size:14px;color:var(--muted);text-align:center;margin-bottom:28px;line-height:1.8;}
+  .ob-type-card{background:var(--card);border:2px solid var(--border);border-radius:18px;padding:20px 18px;margin-bottom:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:16px;}
+  .ob-type-card:active{transform:scale(.98);}
+  .ob-type-card.owner{border-right:4px solid var(--accent);}
+  .ob-type-card.investor{border-right:4px solid var(--gold);}
+  .ob-type-icon{font-size:38px;}
+  .ob-type-info{flex:1;}
+  .ob-type-name{font-size:16px;font-weight:700;margin-bottom:4px;}
+  .ob-type-desc{font-size:12px;color:var(--muted);line-height:1.5;}
+  .ob-unit-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;}
+  .ob-unit-btn{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer;transition:all .2s;}
+  .ob-unit-btn:active{transform:scale(.96);}
+  .ob-unit-btn .icon{font-size:28px;margin-bottom:6px;}
+  .ob-unit-btn .lbl{font-size:12px;font-weight:700;}
+  .ob-units-added{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;min-height:40px;}
+  .ob-unit-chip{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .ob-unit-chip .rm{color:var(--red);font-size:14px;}
+  .ob-summary-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:12px;}
+  .ob-summary-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .ob-summary-row:last-child{border-bottom:none;}
+  .ob-summary-icon{font-size:22px;width:36px;text-align:center;}
+  .ob-summary-text{flex:1;}
+  .ob-summary-label{font-size:11px;color:var(--muted);}
+  .ob-summary-value{font-size:14px;font-weight:700;}
+  /* ====== Smart Property Card ====== */
+  .smart-prop-card{background:var(--card);border:1px solid var(--border);border-radius:20px;margin-bottom:14px;overflow:hidden;transition:all .2s;}
+  .smart-prop-card:active{transform:scale(.99);}
+  .spc-header{background:linear-gradient(135deg,#1e3a5f,#0f2030);padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .spc-title{font-size:16px;font-weight:800;color:#f1f5f9;}
+  .spc-loc{font-size:11px;color:rgba(255,255,255,.5);margin-top:3px;}
+  .spc-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0;}
+  .spc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);}
+  .spc-stat{background:var(--card);padding:12px 8px;text-align:center;}
+  .spc-stat-val{font-size:17px;font-weight:800;margin-bottom:3px;}
+  .spc-stat-lbl{font-size:10px;color:var(--muted);}
+  .spc-unpaid{padding:10px 14px;border-top:1px solid var(--border);}
+  .spc-unpaid-title{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;}
+  .spc-tenant-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:10px;margin-bottom:6px;}
+  .spc-tenant-name{flex:1;font-size:13px;font-weight:700;}
+  .spc-tenant-amt{font-size:12px;color:var(--red);font-weight:700;margin-left:4px;}
+  .spc-pay-btn{padding:6px 14px;border-radius:8px;border:none;background:var(--green);color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;flex-shrink:0;}
+  .spc-pay-btn:active{transform:scale(.95);}
+  .spc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
+  .spc-action-btn{padding:10px;border-radius:10px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;}
+  .spc-action-btn:active{transform:scale(.97);}
+  .spc-action-btn.edit{background:rgba(59,130,246,.12);color:var(--accent);}
+  .spc-action-btn.del{background:rgba(239,68,68,.12);color:var(--red);}
+  .spc-units-bar{padding:10px 14px 0;}
+  .spc-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .spc-bar-track{flex:1;height:6px;background:var(--border);border-radius:4px;overflow:hidden;}
+  .spc-bar-fill{height:100%;border-radius:4px;transition:width .5s ease;}
+  .spc-bar-label{font-size:11px;color:var(--muted);white-space:nowrap;}
+
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div class="confirm-overlay" id="confirmOverlay" style="display:none" onclick="closeConfirm()">
+  <div class="confirm-box" onclick="event.stopPropagation()">
+    <div class="confirm-title" id="confirmTitle">تأكيد الحذف</div>
+    <div class="confirm-sub"  id="confirmSub">هل أنت متأكد؟ لا يمكن التراجع.</div>
+    <div class="btn-row">
+      <button class="submit-btn red"     onclick="runConfirm()">نعم، احذف</button>
+      <button class="submit-btn outline" onclick="closeConfirm()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen active" id="splash">
+  <div class="success-screen">
+    <div class="splash-logo">إدارة <span>العقارات</span></div>
+    <div class="splash-sub">نظام إدارة العقارات الذكي</div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- 🚀 Onboarding Wizard -->
+<!-- ====================================================== -->
+
+<!-- شاشة 1: الترحيب -->
+<div class="screen" id="ob_welcome">
+  <div class="ob-body" style="justify-content:center;">
+    <div class="ob-emoji">🏠</div>
+    <div class="ob-title">أهلاً بك!</div>
+    <div class="ob-sub">سنضيف أول عقار لك في<br><strong style="color:var(--accent)">3 خطوات سريعة</strong> فقط</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🏗️</div>
+        <div><div style="font-size:13px;font-weight:700;">الخطوة 1</div><div style="font-size:12px;color:var(--muted);">أضف معلومات العقار</div></div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(16,185,129,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚪</div>
+        <div><div style="font-size:13px;font-weight:700;">الخطوة 2</div><div style="font-size:12px;color:var(--muted);">حدّد الوحدات الموجودة</div></div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🧑‍💼</div>
+        <div><div style="font-size:13px;font-weight:700;">الخطوة 3 (اختياري)</div><div style="font-size:12px;color:var(--muted);">أضف أول مستأجر</div></div>
+      </div>
+    </div>
+    <button class="submit-btn blue" onclick="obGoStep(2)">ابدأ الآن 🚀</button>
+    <button class="submit-btn outline" style="margin-top:10px;" onclick="obSkip()">تخطى — أدخل التطبيق مباشرة</button>
+  </div>
+</div>
+
+<!-- شاشة 2: نوع العقار -->
+<div class="screen" id="ob_propType">
+  <div class="ob-progress">
+    <div class="ob-step active" id="obp1"></div>
+    <div class="ob-step" id="obp2"></div>
+    <div class="ob-step" id="obp3"></div>
+  </div>
+  <div class="ob-body">
+    <div class="ob-emoji">🏗️</div>
+    <div class="ob-title">ما نوع ملكيتك للعقار؟</div>
+    <div class="ob-sub">اختر الوضع الذي ينطبق عليك</div>
+    <div class="ob-type-card owner" onclick="obSetPropType('مالك')">
+      <div class="ob-type-icon">🏠</div>
+      <div class="ob-type-info">
+        <div class="ob-type-name">أنا المالك</div>
+        <div class="ob-type-desc">العقار ملكي — كل الإيجار المحصّل دخل صافٍ لي</div>
+      </div>
+      <div style="font-size:18px;color:var(--muted);">←</div>
+    </div>
+    <div class="ob-type-card investor" onclick="obSetPropType('مستثمر')">
+      <div class="ob-type-icon">💼</div>
+      <div class="ob-type-info">
+        <div class="ob-type-name">أنا مستثمر (من الباطن)</div>
+        <div class="ob-type-desc">أستأجر من المالك ثم أؤجر الوحدات لآخرين</div>
+      </div>
+      <div style="font-size:18px;color:var(--muted);">←</div>
+    </div>
+    <button class="submit-btn outline" style="margin-top:8px;" onclick="obSkip()">تخطى</button>
+  </div>
+</div>
+
+<!-- شاشة 3: بيانات العقار -->
+<div class="screen" id="ob_propForm">
+  <div class="ob-progress">
+    <div class="ob-step active" id="obp1b"></div>
+    <div class="ob-step" id="obp2b"></div>
+    <div class="ob-step" id="obp3b"></div>
+  </div>
+  <div class="ob-body">
+    <div class="ob-emoji" id="obPropEmoji">🏠</div>
+    <div class="ob-title" id="obPropTitle">معلومات العقار</div>
+    <div class="ob-sub">أدخل اسم وموقع العقار</div>
+    <div class="form-group"><label class="form-label">اسم العقار</label><input class="form-input" id="obPropName" placeholder="مثال: برج النخيل" type="text"></div>
+    <div class="form-group"><label class="form-label">موقع العقار</label><input class="form-input" id="obPropLocation" placeholder="مثال: الرياض — حي النزهة" type="text"></div>
+    <div id="obInvestorBox" style="display:none;">
+      <div class="note-box gold"><div class="note-title">💼 عقدك مع المالك</div><div class="note-text">المبلغ سيُحتسب تلقائياً في مصروفات هذا العقار</div></div>
+      <div class="form-group"><label class="form-label">إجمالي المبلغ للمالك (ريال)</label><input class="form-input" id="obInvestorRent" placeholder="مثال: 50000" type="number"></div>
+    </div>
+    <button class="submit-btn blue" id="obSavePropBtn" onclick="obSaveProperty()">حفظ والتالي ←</button>
+    <button class="submit-btn outline" style="margin-top:10px;" onclick="obGoStep(2)">← رجوع</button>
+  </div>
+</div>
+
+<!-- شاشة 4: الوحدات -->
+<div class="screen" id="ob_units">
+  <div class="ob-progress">
+    <div class="ob-step done" id="obp1c"></div>
+    <div class="ob-step active" id="obp2c"></div>
+    <div class="ob-step" id="obp3c"></div>
+  </div>
+  <div class="ob-body">
+    <div class="ob-emoji">🚪</div>
+    <div class="ob-title">كم وحدة في العقار؟</div>
+    <div class="ob-sub">اضغط على نوع الوحدة لإضافتها<br><span style="color:var(--muted);font-size:12px;">يمكنك إضافة أكثر من نوع</span></div>
+    <div class="ob-units-added" id="obUnitsAdded"><div style="color:var(--muted);font-size:12px;align-self:center;">لم تُضف وحدات بعد</div></div>
+    <div class="ob-unit-grid">
+      <div class="ob-unit-btn" onclick="obAddUnit('شقة')"><div class="icon">🏢</div><div class="lbl">شقة</div></div>
+      <div class="ob-unit-btn" onclick="obAddUnit('استديو')"><div class="icon">🛋️</div><div class="lbl">استديو</div></div>
+      <div class="ob-unit-btn" onclick="obAddUnit('غرفة')"><div class="icon">🛏️</div><div class="lbl">غرفة</div></div>
+      <div class="ob-unit-btn" onclick="obAddUnit('استراحة')"><div class="icon">🌴</div><div class="lbl">استراحة</div></div>
+      <div class="ob-unit-btn" onclick="obAddUnit('شاليه')"><div class="icon">🏖️</div><div class="lbl">شاليه</div></div>
+      <div class="ob-unit-btn" onclick="obAddUnit('فله')"><div class="icon">🏡</div><div class="lbl">فله</div></div>
+    </div>
+    <button class="submit-btn green" id="obSaveUnitsBtn" onclick="obSaveUnits()">حفظ الوحدات والتالي ←</button>
+    <button class="submit-btn outline" style="margin-top:10px;" onclick="obGoStep(5)">تخطى هذه الخطوة</button>
+  </div>
+</div>
+
+<!-- شاشة 5: مستأجر (اختياري) -->
+<div class="screen" id="ob_tenant">
+  <div class="ob-progress">
+    <div class="ob-step done"></div>
+    <div class="ob-step done"></div>
+    <div class="ob-step active"></div>
+  </div>
+  <div class="ob-body" style="justify-content:center;">
+    <div class="ob-emoji">🧑‍💼</div>
+    <div class="ob-title">هل عندك مستأجر الآن؟</div>
+    <div class="ob-sub">يمكنك إضافته الآن أو لاحقاً<br>من داخل التطبيق في أي وقت</div>
+    <button class="submit-btn green" onclick="obGoAddTenant()" style="margin-bottom:10px;">نعم، أضف مستأجراً الآن 🧑‍💼</button>
+    <button class="submit-btn outline" onclick="obGoStep(6)">لاحقاً — ادخل التطبيق</button>
+  </div>
+</div>
+
+<!-- شاشة 6: تهانينا -->
+<div class="screen" id="ob_done">
+  <div class="ob-body" style="justify-content:center;">
+    <div class="ob-emoji" style="animation:bounceIn .5s ease;">🎉</div>
+    <div class="ob-title">أنت جاهز!</div>
+    <div class="ob-sub" id="obDoneSub">تم إعداد حسابك بنجاح</div>
+    <div class="ob-summary-card" id="obSummaryCard"></div>
+    <button class="submit-btn blue" onclick="obFinish()">ابدأ الإدارة 🚀</button>
+  </div>
+</div>
+
+
+<div class="screen" id="home">
+  <div class="home-header">
+    <div class="home-greeting">مرحباً بك 👋</div>
+    <div class="home-name" id="userName">إدارة العقارات</div>
+  </div>
+  <div class="stats-container">
+    <div class="stats-row two">
+      <div class="stat-card green"><div class="stat-num" id="statProps">—</div><div class="stat-label">🏗️ عقار</div></div>
+      <div class="stat-card blue"><div class="stat-num" id="statTenants">—</div><div class="stat-label">🧑‍💼 مستأجر</div></div>
+    </div>
+    <div class="stats-row three">
+      <div class="stat-card teal"><div class="stat-num" id="statIncome">—</div><div class="stat-label">📥 واردات</div></div>
+      <div class="stat-card red"><div class="stat-num" id="statExpenses">—</div><div class="stat-label">📤 مصروفات</div></div>
+      <div class="stat-card gold"><div class="stat-num" id="statProfit">—</div><div class="stat-label">💰 صافي</div></div>
+    </div>
+  </div>
+  <div class="section-title">الإدارة</div>
+  <div class="menu-grid">
+    <div class="menu-card blue"   onclick="goTo('choosePropertyType')"><div class="menu-icon">🏗️</div><div class="menu-label">إضافة عقار</div><div class="menu-sub">مالك أو مستثمر</div></div>
+    <div class="menu-card green"  onclick="goTo('addUnits')"><div class="menu-icon">🚪</div><div class="menu-label">إضافة وحدات</div><div class="menu-sub">شقة، فله، استديو...</div></div>
+    <div class="menu-card purple" onclick="goTo('addTenant')"><div class="menu-icon">🧑‍💼</div><div class="menu-label">إضافة مستأجر</div><div class="menu-sub">يوم / شهر / سنة</div></div>
+    <div class="menu-card gold"   onclick="goTo('paid')"><div class="menu-icon">💳</div><div class="menu-label">تسجيل دفعة</div><div class="menu-sub">سجّل إيجار مدفوع</div></div>
+    <div class="menu-card red"    onclick="goTo('addExpense')"><div class="menu-icon">📤</div><div class="menu-label">إضافة مصروف</div><div class="menu-sub">صيانة، رواتب، أخرى</div></div>
+    <div class="menu-card teal"   onclick="goTo('listExpenses')"><div class="menu-icon">📋</div><div class="menu-label">سجل المصروفات</div><div class="menu-sub">عرض جميع المصاريف</div></div>
+  </div>
+  <div class="section-title">التقارير</div>
+  <div class="menu-grid">
+    <div class="menu-card orange" onclick="goTo('report')"><div class="menu-icon">📈</div><div class="menu-label">التقرير الإجمالي</div><div class="menu-sub">+ تصدير PDF</div></div>
+    <div class="menu-card blue"   onclick="goTo('propReports')"><div class="menu-icon">🏗️</div><div class="menu-label">تقرير العقارات</div><div class="menu-sub">كل عقار على حدة</div></div>
+    <div class="menu-card red"    onclick="goTo('reminders')"><div class="menu-icon">🔔</div><div class="menu-label">التذكيرات</div><div class="menu-sub">من لم يدفع بعد</div></div>
+    <div class="menu-card green"  onclick="goTo('listTenants')"><div class="menu-icon">👥</div><div class="menu-label">المستأجرون</div><div class="menu-sub">تعديل وحذف</div></div>
+    <!-- ✅ FIX #10: زر إدارة العقارات (تعديل + حذف) -->
+    <div class="menu-card purple" onclick="goTo('listProperties')"><div class="menu-icon">🏢</div><div class="menu-label">إدارة العقارات</div><div class="menu-sub">تعديل وحذف</div></div>
+    <div class="menu-card gold"   onclick="openFullReset()"><div class="menu-icon">⚠️</div><div class="menu-label">إعادة ضبط كامل</div><div class="menu-sub">حذف جميع البيانات</div></div>
+    <div class="menu-card teal"   onclick="goTo('suggest')"><div class="menu-icon">💡</div><div class="menu-label">إرسال اقتراح</div><div class="menu-sub">شاركنا رأيك وأفكارك</div></div>
+    <div class="menu-card full" id="subBanner" onclick="goTo('subscription')" style="background:linear-gradient(135deg,#0f2a4a,#1a1a35);border-color:#2a4a7f;cursor:pointer;position:relative;overflow:hidden;">
+      <div class="menu-icon" style="background:rgba(245,158,11,.15);margin-bottom:0;flex-shrink:0;">💳</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px;" id="subBannerTitle">اشتراكي</div>
+        <div style="font-size:11px;color:var(--muted);" id="subBannerSub">جاري التحميل...</div>
+      </div>
+      <div style="font-size:18px;opacity:.5;">←</div>
+    </div>
+    <div class="menu-card full" style="background:linear-gradient(135deg,#1e3a5f,#1a2235);border-color:#2a4a7f;cursor:default;">
+      <div class="menu-icon" style="background:rgba(59,130,246,.15);margin-bottom:0;">🗓️</div>
+      <div style="flex:1;"><div id="currentDate" style="font-size:13px;font-weight:700;margin-bottom:2px;"></div><div id="currentTime" style="font-size:12px;color:#60a5fa;font-weight:600;"></div></div>
+      <div><div id="hijriDate" style="font-size:11px;color:var(--muted);"></div></div>
+    </div>
+  </div>
+  <div class="bottom-safe"></div>
+</div>
+
+<div class="screen" id="choosePropertyType">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">نوع العقار</div><div style="width:36px"></div></div>
+  <div style="padding:20px 16px;">
+    <div class="role-card owner-role"    onclick="setPropType('مالك');goTo('addPropertyForm')"><div class="role-icon">🏠</div><div class="role-info"><div class="role-name">أنا المالك</div><div class="role-desc">العقار ملكي — الإيجار المحصّل كله دخل صافي</div></div><div class="role-arrow">←</div></div>
+    <div class="role-card investor-role" onclick="setPropType('مستثمر');goTo('addPropertyForm')"><div class="role-icon">💼</div><div class="role-info"><div class="role-name">أنا مستثمر (من الباطن)</div><div class="role-desc">أستأجر من المالك ثم أؤجر الوحدات</div></div><div class="role-arrow">←</div></div>
+  </div>
+</div>
+
+<div class="screen" id="addPropertyForm">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title" id="propFormTitle">إضافة عقار</div><div style="width:36px"></div></div>
+  <div style="padding:12px 16px 0;"><div id="propTypeBadge"></div></div>
+  <div class="form-body">
+    <div class="form-group"><label class="form-label">اسم العقار</label><input class="form-input" id="propName" placeholder="مثال: برج النخيل" type="text"></div>
+    <div class="form-group"><label class="form-label">موقع العقار</label><input class="form-input" id="propLocation" placeholder="مثال: الرياض - حي النزهة" type="text"></div>
+    <div id="investorRentBox" style="display:none;">
+      <div class="note-box gold"><div class="note-title">💼 عقد استثمارك مع المالك</div><div class="note-text">المبلغ والمدة سيُحتسبان في مصروفات هذا العقار</div></div>
+      <div class="form-group"><label class="form-label">مدة العقد مع المالك</label><div class="period-tabs-2"><button class="tab-btn active-month" id="propTabMonth" onclick="setPropContractType('أشهر')">📅 بالأشهر</button><button class="tab-btn" id="propTabYear" onclick="setPropContractType('سنة')">📆 بالسنة</button></div></div>
+      <div id="monthsPickerBox"><div class="form-group"><label class="form-label">عدد الأشهر (1 — 11)</label><div class="months-grid" id="monthsGrid"></div></div></div>
+      <div id="yearsBox" style="display:none;"><div class="form-group"><label class="form-label">عدد السنوات</label><input class="form-input" id="propYears" placeholder="مثال: 2" type="number" min="1"></div></div>
+      <div class="form-group"><label class="form-label">إجمالي المبلغ للمالك (ريال)</label><input class="form-input" id="propInvestorRent" placeholder="مثال: 50000" type="number"></div>
+    </div>
+    <button class="submit-btn blue" id="savePropBtn" onclick="saveProperty()">إضافة العقار 🏗️</button>
+  </div>
+</div>
+
+<div class="screen" id="addUnits">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">اختر العقار</div><div style="width:36px"></div></div>
+  <div class="prop-select-list" id="unitPropList"></div>
+</div>
+<div class="screen" id="addUnitType">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title" id="unitPropTitle">نوع الوحدة</div><div style="width:36px"></div></div>
+  <div style="padding:16px 16px 8px;color:var(--muted);font-size:13px;">اختر نوع الوحدة:</div>
+  <div class="unit-grid">
+    <div class="unit-card" onclick="selectUnit('شقة')"><div class="unit-icon">🏢</div><div class="unit-label">شقة</div></div>
+    <div class="unit-card" onclick="selectUnit('استديو')"><div class="unit-icon">🛋️</div><div class="unit-label">استديو</div></div>
+    <div class="unit-card" onclick="selectUnit('غرفة')"><div class="unit-icon">🛏️</div><div class="unit-label">غرفة</div></div>
+    <div class="unit-card" onclick="selectUnit('استراحة')"><div class="unit-icon">🌴</div><div class="unit-label">استراحة</div></div>
+    <div class="unit-card" onclick="selectUnit('شاليه')"><div class="unit-icon">🏖️</div><div class="unit-label">شاليه</div></div>
+    <div class="unit-card" onclick="selectUnit('فله')"><div class="unit-icon">🏡</div><div class="unit-label">فله</div></div>
+  </div>
+</div>
+
+<div class="screen" id="addTenant">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">إضافة مستأجر</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <div class="form-group"><label class="form-label">اسم المستأجر</label><input class="form-input" id="tenantName" placeholder="الاسم الكامل" type="text"></div>
+    <div class="form-group"><label class="form-label">رقم الهاتف</label><input class="form-input" id="tenantPhone" placeholder="05xxxxxxxx" type="tel"></div>
+    <div class="form-group"><label class="form-label">العقار</label><select class="form-input" id="tenantProp" onchange="updateUnitSelect()"><option value="">اختر العقار</option></select></div>
+    <div class="form-group"><label class="form-label">الوحدة</label><select class="form-input" id="tenantUnit"><option value="">اختر الوحدة</option></select></div>
+    <div class="form-group"><label class="form-label">مدة الإيجار</label>
+      <div class="period-tabs-3">
+        <button class="tab-btn active-day" id="tenTabDay"   onclick="setTenantPeriod('يوم')">☀️ يومي</button>
+        <button class="tab-btn"            id="tenTabMonth" onclick="setTenantPeriod('شهر')">📅 شهري</button>
+        <button class="tab-btn"            id="tenTabYear"  onclick="setTenantPeriod('سنة')">📆 سنوي</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label" id="tenantCountLabel">عدد الأيام</label><input class="form-input" id="tenantCount" placeholder="مثال: 3" type="number" min="1" value="1" oninput="calcEndDate()"></div>
+    <div class="form-group"><label class="form-label">تاريخ بداية العقد</label><input class="form-input" id="tenantStartDate" type="date" oninput="calcEndDate()"></div>
+    <div class="form-group" id="endDateBox" style="display:none;"><div class="note-box green"><div class="note-title">📅 تاريخ انتهاء العقد</div><div class="note-text" id="endDateDisplay">—</div></div></div>
+    <div class="form-group"><label class="form-label">وقت تسليم الوحدة (الخروج)</label>
+      <div class="period-tabs-3">
+        <button class="tab-btn" id="coTime12" onclick="setCheckoutTime('12:00')">🕛 12:00 ظهراً</button>
+        <button class="tab-btn active-day" id="coTime14" onclick="setCheckoutTime('14:00')">🕑 2:00 ظهراً</button>
+        <button class="tab-btn" id="coTime16" onclick="setCheckoutTime('16:00')">🕓 4:00 عصراً</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">الإيجار الإجمالي (ريال)</label><input class="form-input" id="tenantRent" placeholder="مثال: 500" type="number"></div>
+    <button class="submit-btn green" id="saveTenantBtn" onclick="saveTenant()">إضافة المستأجر 🧑‍💼</button>
+  </div>
+</div>
+
+<div class="screen" id="editTenant">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تعديل المستأجر</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <input type="hidden" id="editTenantId">
+    <div class="form-group"><label class="form-label">اسم المستأجر</label><input class="form-input" id="editTenantName" type="text"></div>
+    <div class="form-group"><label class="form-label">رقم الهاتف</label><input class="form-input" id="editTenantPhone" type="tel"></div>
+    <div class="form-group"><label class="form-label">الإيجار (ريال)</label><input class="form-input" id="editTenantRent" type="number"></div>
+    <div class="form-group"><label class="form-label">حالة الدفع</label>
+      <div class="period-tabs-2">
+        <button class="tab-btn" id="editPaidNo"  onclick="setEditPaid(false)">❌ لم يدفع</button>
+        <button class="tab-btn active-day" id="editPaidYes" onclick="setEditPaid(true)">✅ دفع</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">تاريخ بداية العقد</label><input class="form-input" id="editStartDate" type="date"></div>
+    <div class="form-group"><label class="form-label">تاريخ نهاية العقد</label><input class="form-input" id="editEndDate" type="date"></div>
+    <button class="submit-btn orange" id="saveEditTenantBtn" onclick="saveEditTenant()">حفظ التعديلات ✏️</button>
+    <button class="submit-btn outline" style="margin-top:8px" onclick="goBack()">إلغاء</button>
+  </div>
+</div>
+
+<!-- ✅ FIX #10: شاشة تعديل العقار -->
+<div class="screen" id="editProperty">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تعديل العقار</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <input type="hidden" id="editPropId">
+    <div class="form-group"><label class="form-label">اسم العقار</label><input class="form-input" id="editPropName" type="text"></div>
+    <div class="form-group"><label class="form-label">موقع العقار</label><input class="form-input" id="editPropLocation" type="text"></div>
+    <button class="submit-btn orange" id="saveEditPropBtn" onclick="saveEditProperty()">حفظ التعديلات ✏️</button>
+    <button class="submit-btn outline" style="margin-top:8px" onclick="goBack()">إلغاء</button>
+  </div>
+</div>
+
+<!-- ✅ FIX #10: شاشة قائمة العقارات -->
+<div class="screen" id="listProperties">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">بطاقات العقارات</div><div style="width:36px"></div></div>
+  <div style="padding:14px 16px 0;display:flex;align-items:center;gap:8px;" id="propListSummary"></div>
+  <div style="padding:12px 14px 20px;" id="propList"></div>
+</div>
+
+<!-- شاشة إرسال اقتراح -->
+<div class="screen" id="suggest">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">إرسال اقتراح 💡</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <div class="note-box blue" style="margin-bottom:20px;">
+      <div class="note-title">💡 شاركنا أفكارك</div>
+      <div class="note-text">اقتراحاتك تساعدنا على تحسين التطبيق — سنقرأ كل رسالة بعناية 🙏</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">نوع الاقتراح</label>
+      <div class="cat-grid">
+        <button class="cat-btn selected" onclick="selectSuggestCat(this,'✨ ميزة جديدة')">✨ ميزة جديدة</button>
+        <button class="cat-btn" onclick="selectSuggestCat(this,'🐛 مشكلة')">🐛 مشكلة</button>
+        <button class="cat-btn" onclick="selectSuggestCat(this,'🎨 تصميم')">🎨 تصميم</button>
+        <button class="cat-btn" onclick="selectSuggestCat(this,'⚡ أداء')">⚡ أداء</button>
+        <button class="cat-btn" onclick="selectSuggestCat(this,'📋 أخرى')">📋 أخرى</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">اكتب اقتراحك</label>
+      <textarea class="form-input" id="suggestText" placeholder="اكتب اقتراحك أو ملاحظتك هنا..." rows="6" style="resize:none;min-height:140px;line-height:1.7;"></textarea>
+    </div>
+    <button class="submit-btn" id="sendSuggestBtn" onclick="sendSuggestion()" style="background:linear-gradient(135deg,#14b8a6,#0d9488);color:#fff;">إرسال الاقتراح 🚀</button>
+  </div>
+</div>
+
+<!-- شاشة إعادة الضبط الكامل -->
+<div class="screen" id="fullReset">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">إعادة ضبط كامل</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <div class="note-box gold" style="margin-bottom:20px;">
+      <div class="note-title">⚠️ تحذير مهم!</div>
+      <div class="note-text">سيتم حذف جميع البيانات نهائياً:<br>• جميع العقارات<br>• جميع الوحدات<br>• جميع المستأجرين<br>• جميع المصروفات<br>• جميع الواردات<br><br>لا يمكن التراجع عن هذا الإجراء!</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">للتأكيد أدخل: 12345678</label>
+      <input class="form-input" id="resetPin" placeholder="أدخل رمز التأكيد" type="number" maxlength="8" style="text-align:center;font-size:24px;letter-spacing:8px;">
+    </div>
+    <button class="submit-btn red" id="resetBtn" onclick="executeFullReset()">🗑️ حذف الكل نهائياً</button>
+    <button class="submit-btn outline" style="margin-top:10px;" onclick="goBack()">إلغاء</button>
+  </div>
+</div>
+
+<div class="screen" id="paid">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تسجيل دفعة</div><div style="width:36px"></div></div>
+  <div class="list-body" id="paidList"></div>
+</div>
+
+<div class="screen" id="paidSuccess">
+  <div class="success-screen">
+    <div class="success-icon">💳</div>
+    <div class="success-title">تم تسجيل الدفعة!</div>
+    <div class="success-sub" id="paidSuccessSub"></div>
+    <div class="btn-row" style="max-width:320px;width:100%;">
+      <button class="submit-btn red"     onclick="goTo('addExpense')">➕ إضافة مصروف</button>
+      <button class="submit-btn outline" onclick="goTo('home')">الرئيسية 🏠</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="addExpense">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">إضافة مصروف</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <div class="form-group"><label class="form-label">تصنيف المصروف</label>
+      <div class="cat-grid">
+        <button class="cat-btn selected" onclick="selectExpCat(this,'صيانة')">🔧 صيانة</button>
+        <button class="cat-btn" onclick="selectExpCat(this,'رواتب')">👷 رواتب</button>
+        <button class="cat-btn" onclick="selectExpCat(this,'فواتير')">💡 فواتير</button>
+        <button class="cat-btn" onclick="selectExpCat(this,'تسويق')">📢 تسويق</button>
+        <button class="cat-btn" onclick="selectExpCat(this,'قانوني')">⚖️ قانوني</button>
+        <button class="cat-btn" onclick="selectExpCat(this,'أخرى')">📦 أخرى</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">وصف المصروف</label><input class="form-input" id="expDesc" placeholder="مثال: تصليح مكيف شقة 3" type="text"></div>
+    <div class="form-group"><label class="form-label">العقار المرتبط (اختياري)</label><select class="form-input" id="expProp" onchange="updateExpUnitSelect()"><option value="">— غير مرتبط —</option></select></div>
+    <div class="form-group"><label class="form-label">الوحدة المرتبطة (اختياري)</label><select class="form-input" id="expUnit"><option value="">— غير مرتبط —</option></select></div>
+    <div class="form-group"><label class="form-label">المبلغ (ريال)</label><input class="form-input" id="expAmount" placeholder="مثال: 500" type="number"></div>
+    <button class="submit-btn red" id="saveExpBtn" onclick="saveExpense()">تسجيل المصروف 📤</button>
+  </div>
+</div>
+
+<div class="screen" id="listExpenses">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">سجل المصروفات</div><div style="width:36px"></div></div>
+  <div class="list-body" id="expensesList"></div>
+</div>
+
+<!-- شاشة تعديل المصروف -->
+<div class="screen" id="editExpense">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تعديل المصروف</div><div style="width:36px"></div></div>
+  <div class="form-body">
+    <input type="hidden" id="editExpId">
+    <div class="form-group"><label class="form-label">تصنيف المصروف</label>
+      <div class="cat-grid">
+        <button class="cat-btn" data-cat="صيانة" onclick="selectEditExpCat(this,'صيانة')">🔧 صيانة</button>
+        <button class="cat-btn" data-cat="رواتب" onclick="selectEditExpCat(this,'رواتب')">👷 رواتب</button>
+        <button class="cat-btn" data-cat="فواتير" onclick="selectEditExpCat(this,'فواتير')">💡 فواتير</button>
+        <button class="cat-btn" data-cat="تسويق" onclick="selectEditExpCat(this,'تسويق')">📢 تسويق</button>
+        <button class="cat-btn" data-cat="قانوني" onclick="selectEditExpCat(this,'قانوني')">⚖️ قانوني</button>
+        <button class="cat-btn" data-cat="أخرى" onclick="selectEditExpCat(this,'أخرى')">📦 أخرى</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">وصف المصروف</label><input class="form-input" id="editExpDesc" type="text"></div>
+    <div class="form-group"><label class="form-label">المبلغ (ريال)</label><input class="form-input" id="editExpAmount" type="number"></div>
+    <button class="submit-btn orange" id="saveEditExpBtn" onclick="saveEditExpense()">حفظ التعديلات ✏️</button>
+    <button class="submit-btn outline" style="margin-top:8px" onclick="goBack()">إلغاء</button>
+  </div>
+</div>
+
+<div class="screen" id="report">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">التقرير الإجمالي</div><button class="pdf-btn" id="pdfBtn" onclick="exportPDF()">📄 PDF</button></div>
+  <div id="reportContent"></div>
+</div>
+
+<div class="screen" id="propReports">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">تقرير العقارات</div><div style="width:36px"></div></div>
+  <div id="propReportsContent" style="padding-bottom:20px;"></div>
+</div>
+
+<div class="screen" id="reminders">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">التذكيرات</div><div style="width:36px"></div></div>
+  <div class="list-body" id="reminderList"></div>
+</div>
+
+<div class="screen" id="listTenants">
+  <div class="header"><div class="back-btn" onclick="goBack()">←</div><div class="header-title">المستأجرون</div><div style="width:36px"></div></div>
+  <div class="list-body" id="tenantList"></div>
+</div>
+
+<div class="screen" id="subscription">
+  <div class="header">
+    <div class="back-btn" onclick="goBack()">←</div>
+    <div class="header-title">اشتراكي 💳</div>
+    <div style="width:36px"></div>
+  </div>
+  <div id="subContent" style="padding:20px 16px;flex:1;"></div>
+</div>
+
+<div class="screen" id="success">
+  <div class="success-screen">
+    <div class="success-icon">✅</div>
+    <div class="success-title" id="successTitle">تم بنجاح!</div>
+    <div class="success-sub"  id="successSub"></div>
+    <button class="submit-btn blue" style="max-width:240px" onclick="goTo('home')">العودة للرئيسية 🏠</button>
+  </div>
+</div>
+
+<div class="screen" id="successSuggest">
+  <div class="success-screen">
+    <div class="success-icon">🚀</div>
+    <div class="success-title">شكراً على اقتراحك!</div>
+    <div class="success-sub">تم إرسال اقتراحك بنجاح ✅<br>سنأخذه بعين الاعتبار لتحسين التطبيق 🙏</div>
+    <button class="submit-btn blue" style="max-width:240px" onclick="goTo('home')">العودة للرئيسية 🏠</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+const API = 'https://mullak-bot-production.up.railway.app';
+// ============================================================
+
+let jwtToken         = null;
+let sessionId        = null;
+let sessionStartTime = Date.now();
+let heartbeatTimer   = null;
+let nav              = ['home'];
+let props            = [], tenants = [], expenses = [];
+let selectedPropId       = null;
+let currentPropType      = 'مالك';
+let currentPropContract  = 'أشهر';
+let selectedMonths       = 1;
+let currentTenantPeriod  = 'يوم';
+let currentExpCat        = 'صيانة';
+let editPaidStatus       = false;
+let confirmCallback      = null;
+let currentCheckoutTime  = '14:00';
+let subData              = {status:'none', active:false, days_left:0};
+
+const fmt      = n => Number(n||0).toLocaleString('ar-SA');
+const catIcons = {'صيانة':'🔧','رواتب':'👷','فواتير':'💡','تسويق':'📢','قانوني':'⚖️','أخرى':'📦'};
+const today    = () => new Date().toISOString().split('T')[0];
+
+// كاش بسيط لتقليل الطلبات المتكررة
+const _apiCache = {};
+const CACHE_TTL = 5000; // 5 ثوانٍ
+function cachedApi(method, path, body) {
+  if (method === 'GET') {
+    const key = path;
+    const cached = _apiCache[key];
+    if (cached && Date.now() - cached.time < CACHE_TTL) return Promise.resolve(cached.data);
+    return api(method, path, body).then(data => { _apiCache[key] = { data, time: Date.now() }; return data; });
+  }
+  // عند الكتابة، امسح الكاش
+  Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+  return api(method, path, body);
+}
+
+// ✅ FIX #5: دالة تنظيف HTML لمنع XSS في الفرونت
+function escHtml(str) {
+  if (str === null || str === undefined) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(String(str)));
+  return div.innerHTML;
+}
+
+// ============================================================
+// Toast + Confirm + Btn
+// ============================================================
+let toastTimer;
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3500);
+}
+function confirm2(title, sub, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmSub').textContent   = sub;
+  confirmCallback = cb;
+  document.getElementById('confirmOverlay').style.display = 'flex';
+}
+function runConfirm()  { const cb = confirmCallback; closeConfirm(); if(cb) cb(); }
+function closeConfirm(){ document.getElementById('confirmOverlay').style.display = 'none'; confirmCallback = null; }
+function setBtn(id, loading, label) {
+  const b = document.getElementById(id); if (!b) return;
+  b.disabled = loading;
+  b.innerHTML = loading ? `${escHtml(label)} <span class="spinner"></span>` : escHtml(label);
+}
+
+// ============================================================
+// 📊 Session Tracking
+// ============================================================
+function getDuration() { return Math.floor((Date.now() - sessionStartTime) / 1000); }
+
+function sendSessionEnd() {
+  if (!sessionId || !jwtToken) return;
+  // ✅ FIX #4: يحتاج Authorization الآن
+  // sendBeacon لا يدعم headers مخصصة، لذلك نستخدم fetch مع keepalive
+  try {
+    fetch(`${API}/api/session/end`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${jwtToken}` },
+      body: JSON.stringify({ session_id: sessionId, duration: getDuration() }),
+      keepalive: true
+    }).catch(() => {});
+  } catch(e) {}
+}
+
+function startHeartbeat() {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(async () => {
+    if (!sessionId || !jwtToken) return;
+    try {
+      await fetch(`${API}/api/session/ping`, {
+        method:  'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${jwtToken}` },
+        body:    JSON.stringify({ session_id: sessionId, duration: getDuration() })
+      });
+    } catch(e) {}
+  }, 30000);
+}
+
+window.addEventListener('beforeunload', sendSessionEnd);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') sendSessionEnd();
+});
+
+// ============================================================
+// API — ✅ FIX #7 + #8: إعادة محاولة محدودة + اعتراض SUB_EXPIRED
+// ============================================================
+async function api(method, path, body, _retryCount) {
+  const retries = _retryCount || 0;
+  const headers = { 'Content-Type': 'application/json' };
+  if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+  // ✅ مسح الكاش عند أي عملية كتابة
+  if (method !== 'GET') {
+    Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+  }
+  const res  = await fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // ✅ FIX #8: حد أقصى لإعادة المحاولة
+    if (res.status === 401 && retries < 2) {
+      jwtToken = null;
+      await login();
+      return api(method, path, body, retries + 1);
+    }
+    // ✅ FIX #7: اعتراض خطأ انتهاء الاشتراك
+    if (data.code === 'SUB_EXPIRED') {
+      toast('⚠️ اشتراكك منتهٍ — جدّد للمتابعة', 'error');
+      setTimeout(() => goTo('subscription'), 1500);
+      throw new Error('اشتراكك منتهٍ');
+    }
+    throw new Error(data.error || 'خطأ في الخادم');
+  }
+  return data;
+}
+
+// ============================================================
+// Login
+// ============================================================
+async function login() {
+  const tg = window.Telegram.WebApp;
+  const initData = tg.initData;
+
+  if (!initData) {
+    document.getElementById('splash').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;gap:16px;">
+        <div style="font-size:56px">🔒</div>
+        <div style="font-size:20px;font-weight:800;color:#f1f5f9;">يجب فتح التطبيق من تيليجرام</div>
+        <div style="font-size:14px;color:#64748b;line-height:1.8;">هذا التطبيق يعمل فقط داخل بوت تيليجرام</div>
+      </div>`;
+    throw new Error('ليس داخل تيليجرام');
+  }
+
+  const res  = await fetch(`${API}/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'فشل التحقق');
+
+  jwtToken = data.token;
+  const isActiveStatus = data.sub_status && data.sub_status !== 'none' && data.sub_status !== 'expired';
+  const hasValidExpiry = data.sub_expires && new Date(data.sub_expires) > new Date();
+  subData  = {
+    status:    data.sub_status  || 'none',
+    active:    isActiveStatus && (hasValidExpiry || (data.sub_days || 0) > 0),
+    days_left: data.sub_days   || 0,
+    expires:   data.sub_expires || '',
+    free_mode: data.sub_status === 'free'
+  };
+  document.getElementById('userName').textContent = data.first_name || 'إدارة العقارات';
+
+  if (data.session_id) {
+    sessionId        = data.session_id;
+    sessionStartTime = Date.now();
+    startHeartbeat();
+  }
+}
+
+async function init() {
+  try {
+    const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
+    // ✅ ربط زر الرجوع في تيليجرام
+    if (tg.BackButton) {
+      tg.BackButton.onClick(() => goBack());
+    }
+    await login();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentDone = urlParams.get('payment');
+
+    if (paymentDone === 'done') {
+      setTimeout(() => {
+        updateSubBanner();
+        goTo('subscription');
+        setTimeout(() => loadSubscription(), 800);
+      }, 600);
+    } else {
+      setTimeout(() => { maybeShowOnboarding(); }, 600);
+    }
+  } catch(e) {
+    console.error('Login failed:', e.message);
+  }
+}
+
+// ============================================================
+// Nav
+// ============================================================
+function goTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screen).classList.add('active');
+  window.scrollTo(0,0);
+  if (screen !== nav[nav.length-1]) nav.push(screen);
+  const renders = { home:loadHome, addUnits:renderUnitPropList, addTenant:renderTenantForm,
+    addExpense:renderExpenseForm, paid:loadPaidList, listExpenses:loadExpensesList,
+    report:loadReport, propReports:loadPropReports, reminders:loadReminders, listTenants:loadTenantList,
+    subscription:loadSubscription, listProperties:loadPropertyList, fullReset:null, editExpense:null };
+  if (renders[screen]) renders[screen]();
+  // ✅ زر الرجوع في تيليجرام
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.BackButton) {
+    if (screen === 'home') tg.BackButton.hide();
+    else tg.BackButton.show();
+  }
+}
+function goBack() {
+  nav.pop();
+  const prev = nav[nav.length-1] || 'home';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(prev).classList.add('active');
+  window.scrollTo(0,0);
+  // ✅ إعادة تحميل البيانات عند الرجوع لشاشات القوائم
+  const reloaders = {
+    home: loadHome,
+    listProperties: loadPropertyList,
+    listTenants: loadTenantList,
+    listExpenses: loadExpensesList,
+    paid: loadPaidList,
+    report: loadReport,
+    propReports: loadPropReports,
+    reminders: loadReminders
+  };
+  if (reloaders[prev]) reloaders[prev]();
+  // ✅ زر الرجوع في تيليجرام
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.BackButton) {
+    if (prev === 'home') tg.BackButton.hide();
+    else tg.BackButton.show();
+  }
+}
+
+// ============================================================
+// Home
+// ============================================================
+async function loadHome() {
+  try {
+    updateSubBanner();
+    const s = await cachedApi('GET', '/api/stats');
+    document.getElementById('statProps').textContent    = s.props    ?? 0;
+    document.getElementById('statTenants').textContent  = s.tenants  ?? 0;
+    document.getElementById('statIncome').textContent   = fmt(s.income);
+    document.getElementById('statExpenses').textContent = fmt(s.expenses);
+    const ne = document.getElementById('statProfit');
+    ne.textContent = fmt(s.net);
+    ne.style.color = (s.net||0) >= 0 ? 'var(--gold)' : 'var(--red)';
+  } catch(e) { toast('⚠️ ' + e.message, 'error'); }
+}
+
+function expiryStatus(endDate) {
+  if (!endDate) return null;
+  const diff = Math.ceil((new Date(endDate) - new Date()) / 86400000);
+  if (diff < 0)   return { label:'منتهي',                     cls:'expiry-expired' };
+  if (diff <= 30) return { label:`ينتهي خلال ${diff} يوم`,   cls:'expiry-soon' };
+  return                 { label:'ساري',                      cls:'expiry-ok' };
+}
+
+// ============================================================
+// Properties
+// ============================================================
+function setPropType(type) {
+  currentPropType = type;
+  const isInv = type === 'مستثمر';
+  document.getElementById('propFormTitle').textContent = isInv ? 'إضافة عقار — مستثمر' : 'إضافة عقار — مالك';
+  document.getElementById('propTypeBadge').innerHTML   = isInv
+    ? '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(245,158,11,.12);color:var(--gold);border:1px solid var(--gold);">💼 مستثمر</span>'
+    : '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(59,130,246,.12);color:var(--accent);border:1px solid var(--accent);">🏠 مالك</span>';
+  document.getElementById('investorRentBox').style.display = isInv ? 'block' : 'none';
+  currentPropContract = 'أشهر'; selectedMonths = 1;
+  buildMonthsGrid(); setPropContractType('أشهر');
+  setBtn('savePropBtn', false, 'إضافة العقار 🏗️');
+}
+function buildMonthsGrid() {
+  const g = document.getElementById('monthsGrid'); if (!g) return; g.innerHTML = '';
+  for (let i=1;i<=11;i++){const b=document.createElement('button');b.className='month-btn'+(i===selectedMonths?' selected':'');b.textContent=i;b.onclick=()=>selectMonth(i);g.appendChild(b);}
+}
+function selectMonth(n) { selectedMonths=n; document.querySelectorAll('.month-btn').forEach((b,i)=>b.className='month-btn'+(i+1===n?' selected':'')); }
+function setPropContractType(type) {
+  currentPropContract=type;
+  const tm=document.getElementById('propTabMonth'),ty=document.getElementById('propTabYear');
+  const mp=document.getElementById('monthsPickerBox'),yb=document.getElementById('yearsBox');
+  if(!tm)return;
+  if(type==='أشهر'){tm.className='tab-btn active-month';ty.className='tab-btn';mp.style.display='block';yb.style.display='none';}
+  else{ty.className='tab-btn active-annual';tm.className='tab-btn';mp.style.display='none';yb.style.display='block';}
+}
+async function saveProperty() {
+  const name=document.getElementById('propName').value.trim();
+  const loc =document.getElementById('propLocation').value.trim();
+  if(!name){toast('⚠️ أدخل اسم العقار','error');return;}
+  if(!loc) {toast('⚠️ أدخل موقع العقار','error');return;}
+  const isInv=currentPropType==='مستثمر';
+  let contractDesc='',investorRent=0;
+  if(isInv){
+    investorRent=parseInt(document.getElementById('propInvestorRent').value||0);
+    if(!investorRent){toast('⚠️ أدخل المبلغ المدفوع للمالك','error');return;}
+    const yr=parseInt(document.getElementById('propYears')?.value||1);
+    contractDesc=currentPropContract==='أشهر'?selectedMonths+' شهر':yr+(yr===1?' سنة':' سنوات');
+  }
+  setBtn('savePropBtn',true,'جاري الحفظ...');
+  try{
+    await api('POST','/api/properties',{name,location:loc,type:currentPropType,investor_rent:investorRent,contract_desc:contractDesc});
+    ['propName','propLocation','propInvestorRent','propYears'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    showSuccess('تم إضافة العقار! 🏗️',isInv?`${name} — ${loc}\n📋 ${contractDesc} · 💸 ${fmt(investorRent)} ريال`:`${name} — ${loc}`);
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{setBtn('savePropBtn',false,'إضافة العقار 🏗️');}
+}
+
+// ✅ FIX #10: قائمة العقارات مع أزرار تعديل + حذف
+async function loadPropertyList() {
+  const list    = document.getElementById('propList');
+  const summary = document.getElementById('propListSummary');
+  list.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  if (summary) summary.innerHTML = '';
+  try {
+    const [allProps, allTenants, allUnits] = await Promise.all([
+      api('GET', '/api/properties'),
+      api('GET', '/api/tenants'),
+      api('GET', '/api/units')
+    ]);
+    props = allProps;
+    if (!props.length) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات</div></div>';
+      return;
+    }
+    const totalUnits    = allUnits.length;
+    const occupiedUnits = allUnits.filter(u => u.tenant_name).length;
+    const unpaidCount   = allTenants.filter(t => !t.paid).length;
+    if (summary) {
+      summary.innerHTML = `
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:var(--accent);">${props.length}</div>
+          <div style="font-size:10px;color:var(--muted);">عقار</div>
+        </div>
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:var(--green);">${occupiedUnits}/${totalUnits}</div>
+          <div style="font-size:10px;color:var(--muted);">وحدة مؤجرة</div>
+        </div>
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:${unpaidCount>0?'var(--red)':'var(--green)'};">${unpaidCount}</div>
+          <div style="font-size:10px;color:var(--muted);">لم يدفع</div>
+        </div>`;
+    }
+    list.innerHTML = props.map(prop => {
+      const isInv    = prop.type === 'مستثمر';
+      const pUnits   = allUnits.filter(u => u.property_id === prop.id);
+      const pTenants = allTenants.filter(t => t.property_id === prop.id);
+      const unpaid   = pTenants.filter(t => !t.paid);
+      const paid     = pTenants.filter(t =>  t.paid);
+      const totalRent= pTenants.reduce((s,t) => s+(t.rent||0), 0);
+      const paidRent = paid.reduce((s,t) => s+(t.rent||0), 0);
+      const occupied = pUnits.filter(u => u.tenant_name).length;
+      const totalU   = pUnits.length;
+      const occPct   = totalU  ? Math.round(occupied/totalU*100)    : 0;
+      const paidPct  = totalRent ? Math.round(paidRent/totalRent*100): 0;
+      const nameEsc  = escHtml(prop.name).replace(/'/g,"\'");
+      const unpaidRows = unpaid.slice(0,3).map(t => `
+        <div class="spc-tenant-row">
+          <div style="font-size:16px;">🧑‍💼</div>
+          <div class="spc-tenant-name">${escHtml(t.name)}<br>
+            <span style="font-size:10px;color:var(--muted);">وحدة ${t.unit_num} · ${escHtml(t.period_label||'')}</span>
+          </div>
+          <span class="spc-tenant-amt">${fmt(t.rent)} ر</span>
+          <button class="spc-pay-btn" onclick="quickPay('${t.id}','${escHtml(t.name).replace(/'/g,"\'")}',event)">✅ دفع</button>
+        </div>`).join('');
+      const moreUnpaid = unpaid.length > 3
+        ? `<div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0;">+ ${unpaid.length-3} آخرين</div>` : '';
+      return `
+      <div class="smart-prop-card">
+        <div class="spc-header">
+          <div style="flex:1;min-width:0;">
+            <div class="spc-title">${isInv?'💼':'🏠'} ${escHtml(prop.name)}</div>
+            <div class="spc-loc">📍 ${escHtml(prop.location||'')}${isInv&&prop.contract_desc?' · عقد: '+escHtml(prop.contract_desc):''}</div>
+          </div>
+          <span class="spc-badge" style="background:${isInv?'rgba(245,158,11,.2)':'rgba(59,130,246,.2)'};color:${isInv?'var(--gold)':'var(--accent)'};">${escHtml(prop.type)}</span>
+        </div>
+        <div class="spc-stats">
+          <div class="spc-stat"><div class="spc-stat-val" style="color:var(--accent);">${totalU}</div><div class="spc-stat-lbl">🚪 وحدة</div></div>
+          <div class="spc-stat"><div class="spc-stat-val" style="color:${unpaid.length>0?'var(--red)':'var(--green)'};">${unpaid.length}</div><div class="spc-stat-lbl">⏳ لم يدفع</div></div>
+          <div class="spc-stat"><div class="spc-stat-val" style="color:var(--gold);">${fmt(paidRent)}</div><div class="spc-stat-lbl">💰 محصّل</div></div>
+        </div>
+        ${totalU>0?`
+        <div class="spc-units-bar">
+          <div class="spc-bar-row">
+            <div class="spc-bar-label" style="font-size:10px;color:var(--muted);width:56px;">الإشغال</div>
+            <div class="spc-bar-track"><div class="spc-bar-fill" style="width:${occPct}%;background:${occPct>=80?'var(--green)':occPct>=50?'var(--gold)':'var(--red)'};"></div></div>
+            <div class="spc-bar-label">${occupied}/${totalU} (${occPct}%)</div>
+          </div>
+          <div class="spc-bar-row">
+            <div class="spc-bar-label" style="font-size:10px;color:var(--muted);width:56px;">التحصيل</div>
+            <div class="spc-bar-track"><div class="spc-bar-fill" style="width:${paidPct}%;background:var(--teal);"></div></div>
+            <div class="spc-bar-label">${fmt(paidRent)}/${fmt(totalRent)}</div>
+          </div>
+        </div>`:''}
+        ${unpaid.length>0?`
+        <div class="spc-unpaid">
+          <div class="spc-unpaid-title">⏳ لم يدفعوا بعد (${unpaid.length})</div>
+          ${unpaidRows}${moreUnpaid}
+        </div>`:pTenants.length>0?`
+        <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;">
+          <div style="font-size:18px;">🎉</div>
+          <div style="font-size:13px;color:var(--green);font-weight:700;">جميع المستأجرين دفعوا!</div>
+        </div>`:''}
+        <div class="spc-actions">
+          <button class="spc-action-btn edit" onclick="openEditProperty('${prop.id}')">✏️ تعديل</button>
+          <button class="spc-action-btn del"  onclick="deleteProperty('${prop.id}','${nameEsc}')">🗑️ أرشفة</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;
+  }
+}
+
+async function quickPay(tenantId, tenantName, event) {
+  event.stopPropagation();
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    await api('POST', `/api/tenants/${tenantId}/pay`);
+    toast('✅ تم تسجيل دفعة ' + tenantName, 'success');
+    loadPropertyList();
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = '✅ دفع';
+  }
+}
+
+function openEditProperty(id) {
+  const p = props.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('editPropId').value = p.id;
+  document.getElementById('editPropName').value = p.name;
+  document.getElementById('editPropLocation').value = p.location || '';
+  setBtn('saveEditPropBtn', false, 'حفظ التعديلات ✏️');
+  goTo('editProperty');
+}
+
+async function saveEditProperty() {
+  const id = document.getElementById('editPropId').value;
+  const name = document.getElementById('editPropName').value.trim();
+  const location = document.getElementById('editPropLocation').value.trim();
+  if (!name) { toast('⚠️ أدخل الاسم', 'error'); return; }
+  setBtn('saveEditPropBtn', true, 'جاري الحفظ...');
+  try {
+    await api('PUT', `/api/properties/${id}`, { name, location });
+    toast('✅ تم تعديل العقار');
+    goBack();
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('saveEditPropBtn', false, 'حفظ التعديلات ✏️'); }
+}
+
+// حذف ناعم — العقار يصبح "سابق" والبيانات المالية تبقى
+function deleteProperty(id, name) {
+  confirm2('أرشفة العقار',
+    `سيتم أرشفة "${name}" كعقار سابق.\n\n✅ البيانات المالية والتقارير ستبقى كما هي.\n⚠️ لن يظهر في القوائم لكنه يبقى في التقارير.`,
+    async () => {
+      try {
+        await api('DELETE', `/api/properties/${id}`);
+        toast('✅ تم أرشفة العقار — البيانات المالية محفوظة');
+        loadPropertyList();
+      } catch(e) { toast('❌ ' + e.message, 'error'); }
+    }
+  );
+}
+
+// إعادة ضبط كامل التطبيق
+function openFullReset() {
+  goTo('fullReset');
+}
+async function executeFullReset() {
+  const pin = document.getElementById('resetPin').value.trim();
+  if (!pin) { toast('⚠️ أدخل الرمز', 'error'); return; }
+  if (pin !== '12345678') { toast('⚠️ رمز التأكيد غير صحيح', 'error'); return; }
+  setBtn('resetBtn', true, 'جاري الحذف...');
+  try {
+    await api('POST', '/api/full-reset', { pin });
+    // مسح الكاش
+    Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+    toast('✅ تم حذف جميع البيانات بنجاح');
+    document.getElementById('resetPin').value = '';
+    goTo('home');
+    loadHome();
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('resetBtn', false, '🗑️ حذف الكل نهائياً'); }
+}
+
+// ============================================================
+// Units
+// ============================================================
+async function renderUnitPropList() {
+  const list=document.getElementById('unitPropList');
+  list.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    props=await api('GET','/api/properties');
+    if(!props.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات — أضف عقاراً أولاً</div></div>';return;}
+    list.innerHTML=props.map(p=>`<div class="prop-select-item" onclick="selectPropForUnit('${p.id}','${escHtml(p.name).replace(/'/g,"\\'")}')"><div style="font-size:28px">${p.type==='مستثمر'?'💼':'🏠'}</div><div style="flex:1;"><div style="font-weight:700;font-size:15px">${escHtml(p.name)}</div><div style="font-size:12px;color:var(--muted)">${escHtml(p.location)}</div></div><span class="list-item-badge badge-${p.type==='مستثمر'?'gold':'blue'}">${escHtml(p.type)}</span></div>`).join('');
+  }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;toast('❌ '+e.message,'error');}
+}
+function selectPropForUnit(id,name){selectedPropId=id;document.getElementById('unitPropTitle').textContent=name;goTo('addUnitType');}
+async function selectUnit(type){
+  if(!selectedPropId){toast('⚠️ لم يتم اختيار العقار','error');return;}
+  document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='none');
+  try{
+    const units=await api('GET',`/api/units?property_id=${selectedPropId}`);
+    // ✅ حساب رقم الوحدة التالي بناءً على أعلى رقم موجود
+    const maxNum = units.length ? Math.max(...units.map(u=>parseInt(u.unit_num)||0)) : 0;
+    const nextNum = maxNum + 1;
+    await api('POST','/api/units',{property_id:selectedPropId,unit_num:nextNum,unit_type:type});
+    showSuccess('تم إضافة الوحدة! 🚪',`${type} رقم ${nextNum}`);
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='');}
+}
+
+// ============================================================
+// Tenant
+// ============================================================
+function calcEndDate(){
+  const sd=document.getElementById('tenantStartDate').value;
+  const count=parseInt(document.getElementById('tenantCount').value||1);
+  const box=document.getElementById('endDateBox');
+  const disp=document.getElementById('endDateDisplay');
+  if(!sd||!count){box.style.display='none';return;}
+  const d=new Date(sd);
+  if(currentTenantPeriod==='يوم')d.setDate(d.getDate()+count);
+  if(currentTenantPeriod==='شهر')d.setMonth(d.getMonth()+count);
+  if(currentTenantPeriod==='سنة')d.setFullYear(d.getFullYear()+count);
+  const endStr=d.toISOString().split('T')[0];
+  const timeLabel = currentCheckoutTime === '12:00' ? '12:00 ظهراً' : currentCheckoutTime === '14:00' ? '2:00 ظهراً' : '4:00 عصراً';
+  disp.textContent=`📅 ${endStr} · 🕐 الخروج ${timeLabel}`;
+  box.dataset.end=endStr;
+  box.style.display='block';
+}
+async function renderTenantForm(){
+  try{
+    props=await api('GET','/api/properties');
+    const sel=document.getElementById('tenantProp');
+    sel.innerHTML='<option value="">اختر العقار</option>';
+    props.forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${escHtml(p.name)} (${escHtml(p.type)})</option>`;});
+    document.getElementById('tenantUnit').innerHTML='<option value="">اختر الوحدة</option>';
+    document.getElementById('tenantName').value='';
+    document.getElementById('tenantPhone').value='';
+    document.getElementById('tenantRent').value='';
+    document.getElementById('tenantCount').value='1';
+    document.getElementById('tenantStartDate').value=today();
+    currentTenantPeriod='يوم';setTenantPeriod('يوم');
+    currentCheckoutTime='14:00';setCheckoutTime('14:00');
+    setBtn('saveTenantBtn',false,'إضافة المستأجر 🧑‍💼');
+    calcEndDate();
+  }catch(e){toast('❌ '+e.message,'error');}
+}
+function setTenantPeriod(p){
+  currentTenantPeriod=p;
+  ['tenTabDay','tenTabMonth','tenTabYear'].forEach(id=>document.getElementById(id).className='tab-btn');
+  const cl=document.getElementById('tenantCountLabel');
+  if(p==='يوم'){document.getElementById('tenTabDay').className='tab-btn active-day';cl.textContent='عدد الأيام';}
+  if(p==='شهر'){document.getElementById('tenTabMonth').className='tab-btn active-month';cl.textContent='عدد الأشهر';}
+  if(p==='سنة'){document.getElementById('tenTabYear').className='tab-btn active-annual';cl.textContent='عدد السنوات';}
+  calcEndDate();
+}
+function setCheckoutTime(t){
+  currentCheckoutTime=t;
+  ['coTime12','coTime14','coTime16'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    el.className='tab-btn'+(
+      (t==='12:00'&&id==='coTime12')||(t==='14:00'&&id==='coTime14')||(t==='16:00'&&id==='coTime16')
+      ?' active-day':'');
+  });
+}
+async function updateUnitSelect(){
+  const propId=document.getElementById('tenantProp').value;
+  const unitSel=document.getElementById('tenantUnit');
+  unitSel.innerHTML='<option value="">جاري التحميل...</option>';
+  if(!propId){unitSel.innerHTML='<option value="">اختر الوحدة</option>';return;}
+  try{
+    const units=await api('GET',`/api/units?property_id=${propId}`);
+    unitSel.innerHTML='<option value="">اختر الوحدة</option>';
+    if(!units.length){unitSel.innerHTML='<option value="">لا توجد وحدات</option>';return;}
+    units.forEach(u=>{
+      const occupied = u.tenant_name && !u.expired;
+      const endInfo = u.tenant_end_date ? ` (ينتهي ${u.tenant_end_date})` : '';
+      unitSel.innerHTML+=`<option value="${u.unit_num}" ${occupied?'disabled':''}>${escHtml(u.unit_type)} رقم ${u.unit_num}${occupied?' — '+escHtml(u.tenant_name)+' (مشغولة'+endInfo+')':u.expired?' — متاحة (انتهى العقد)':''}</option>`;
+    });
+  }catch(e){unitSel.innerHTML='<option value="">خطأ</option>';}
+}
+async function saveTenant(){
+  const name=document.getElementById('tenantName').value.trim();
+  const phone=document.getElementById('tenantPhone').value.trim();
+  const propId=document.getElementById('tenantProp').value;
+  const unitN=document.getElementById('tenantUnit').value;
+  const count=parseInt(document.getElementById('tenantCount').value||1);
+  const rent=parseInt(document.getElementById('tenantRent').value||0);
+  const sd=document.getElementById('tenantStartDate').value;
+  const ed=document.getElementById('endDateBox').dataset.end||'';
+  if(!name){toast('⚠️ أدخل اسم المستأجر','error');return;}
+  if(!phone){toast('⚠️ أدخل رقم الهاتف','error');return;}
+  if(!propId){toast('⚠️ اختر العقار','error');return;}
+  if(!unitN){toast('⚠️ اختر الوحدة','error');return;}
+  if(!rent){toast('⚠️ أدخل مبلغ الإيجار','error');return;}
+  let pl='';
+  if(currentTenantPeriod==='يوم')pl=count+(count===1?' يوم':' أيام');
+  if(currentTenantPeriod==='شهر')pl=count+(count===1?' شهر':' أشهر');
+  if(currentTenantPeriod==='سنة')pl=count+(count===1?' سنة':' سنوات');
+  const prop=props.find(p=>p.id===propId);
+  setBtn('saveTenantBtn',true,'جاري الحفظ...');
+  try{
+    await api('POST','/api/tenants',{name,phone,property_id:propId,unit_num:parseInt(unitN),rent,period:currentTenantPeriod,period_count:count,period_label:pl,start_date:sd||null,end_date:ed||null,checkout_time:currentCheckoutTime});
+    ['tenantName','tenantPhone','tenantRent','tenantCount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    // إذا كنا في وضع Onboarding — روّح لشاشة الإنهاء
+    if (window._obAfterTenant) {
+      window._obAfterTenant = false;
+      obBuildSummary();
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('ob_done').classList.add('active');
+      window.scrollTo(0, 0);
+    } else {
+    showSuccess('تم إضافة المستأجر! 🧑‍💼',`${name}\n🏗️ ${prop?.name} · 🚪 وحدة ${unitN}\n📋 ${pl} · 💰 ${fmt(rent)} ريال${sd?'\n📅 '+sd+' ← '+ed:''}`);
+    }
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{setBtn('saveTenantBtn',false,'إضافة المستأجر 🧑‍💼');}
+}
+
+// ============================================================
+// Edit Tenant
+// ============================================================
+function setEditPaid(val){
+  editPaidStatus=val;
+  document.getElementById('editPaidYes').className=val?'tab-btn active-day':'tab-btn';
+  document.getElementById('editPaidNo').className=val?'tab-btn':'tab-btn active-annual';
+}
+function openEditTenant(t){
+  document.getElementById('editTenantId').value=t.id;
+  document.getElementById('editTenantName').value=t.name;
+  document.getElementById('editTenantPhone').value=t.phone;
+  document.getElementById('editTenantRent').value=t.rent;
+  document.getElementById('editStartDate').value=t.start_date||'';
+  document.getElementById('editEndDate').value=t.end_date||'';
+  editPaidStatus=t.paid||false;
+  setEditPaid(editPaidStatus);
+  setBtn('saveEditTenantBtn',false,'حفظ التعديلات ✏️');
+  goTo('editTenant');
+}
+async function saveEditTenant(){
+  const id=document.getElementById('editTenantId').value;
+  const name=document.getElementById('editTenantName').value.trim();
+  const phone=document.getElementById('editTenantPhone').value.trim();
+  const rent=parseInt(document.getElementById('editTenantRent').value||0);
+  const sd=document.getElementById('editStartDate').value;
+  const ed=document.getElementById('editEndDate').value;
+  if(!name){toast('⚠️ أدخل الاسم','error');return;}
+  if(!rent){toast('⚠️ أدخل الإيجار','error');return;}
+  setBtn('saveEditTenantBtn',true,'جاري الحفظ...');
+  try{
+    await api('PUT',`/api/tenants/${id}`,{name,phone,rent,paid:editPaidStatus,start_date:sd||null,end_date:ed||null});
+    toast('✅ تم تعديل بيانات المستأجر');
+    goBack();
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{setBtn('saveEditTenantBtn',false,'حفظ التعديلات ✏️');}
+}
+async function deleteTenant(id,name){
+  confirm2('حذف المستأجر',`سيتم حذف "${name}" وتحرير وحدته. لا يمكن التراجع.`,async()=>{
+    try{await api('DELETE',`/api/tenants/${id}`);toast('✅ تم حذف المستأجر');loadTenantList();}
+    catch(e){toast('❌ '+e.message,'error');}
+  });
+}
+
+// ============================================================
+// Paid
+// ============================================================
+async function loadPaidList(){
+  const list=document.getElementById('paidList');
+  list.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    tenants=await api('GET','/api/tenants');
+    if(!tenants.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">لا يوجد مستأجرون بعد</div></div>';return;}
+    const icon=t=>t.period==='يوم'?'☀️':t.period==='شهر'?'📅':'📆';
+    list.innerHTML=tenants.map(t=>`<div class="list-item" onclick="markPaid('${t.id}','${escHtml(t.name).replace(/'/g,"\\'")}',${t.rent},'${escHtml(t.period_label||'').replace(/'/g,"\\'")}')"><div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${escHtml(t.name)}</div><div class="list-item-sub">${escHtml(t.properties?.name||'')} · وحدة ${t.unit_num}<br>${icon(t)} ${escHtml(t.period_label||'')} · ${fmt(t.rent)} ريال</div></div><span class="list-item-badge ${t.paid?'badge-green':'badge-red'}">${t.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('');
+  }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+async function markPaid(id,name,rent,pl){
+  const t=tenants.find(x=>x.id===id);
+  if(t?.paid){toast('✅ تم تسجيل الدفعة مسبقاً');return;}
+  try{
+    await api('POST',`/api/tenants/${id}/pay`);
+    document.getElementById('paidSuccessSub').textContent=`${name}\n${pl} · ${fmt(rent)} ريال\n\nهل تريد تسجيل مصروف مرتبط؟`;
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('paidSuccess').classList.add('active');
+    window.scrollTo(0,0);
+    nav=['home'];
+  }catch(e){toast('❌ '+e.message,'error');}
+}
+
+// ============================================================
+// Expenses
+// ============================================================
+async function renderExpenseForm(){
+  try{
+    props=await api('GET','/api/properties');
+    const sel=document.getElementById('expProp');
+    sel.innerHTML='<option value="">— غير مرتبط —</option>';
+    props.forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${escHtml(p.name)}</option>`;});
+    document.getElementById('expUnit').innerHTML='<option value="">— غير مرتبط —</option>';
+    document.getElementById('expDesc').value='';
+    document.getElementById('expAmount').value='';
+    currentExpCat='صيانة';
+    document.querySelectorAll('.cat-btn').forEach((b,i)=>b.className='cat-btn'+(i===0?' selected':''));
+    setBtn('saveExpBtn',false,'تسجيل المصروف 📤');
+  }catch(e){toast('❌ '+e.message,'error');}
+}
+async function updateExpUnitSelect(){
+  const propId=document.getElementById('expProp').value;
+  const us=document.getElementById('expUnit');
+  us.innerHTML='<option value="">— غير مرتبط —</option>';
+  if(!propId)return;
+  try{const units=await api('GET',`/api/units?property_id=${propId}`);units.forEach(u=>{us.innerHTML+=`<option value="${u.unit_num}">${escHtml(u.unit_type)} رقم ${u.unit_num}</option>`;});}catch(e){}
+}
+function selectExpCat(el,cat){currentExpCat=cat;document.querySelectorAll('.cat-btn').forEach(b=>b.className='cat-btn');el.className='cat-btn selected';}
+async function saveExpense(){
+  const desc=document.getElementById('expDesc').value.trim();
+  const amt=parseInt(document.getElementById('expAmount').value||0);
+  if(!desc){toast('⚠️ أدخل وصف المصروف','error');return;}
+  if(!amt){toast('⚠️ أدخل مبلغ المصروف','error');return;}
+  const propId=document.getElementById('expProp').value;
+  const unit=document.getElementById('expUnit').value;
+  setBtn('saveExpBtn',true,'جاري الحفظ...');
+  try{
+    await api('POST','/api/expenses',{category:currentExpCat,description:desc,amount:amt,property_id:propId||null,unit_num:unit?parseInt(unit):null});
+    document.getElementById('expDesc').value='';document.getElementById('expAmount').value='';
+    showSuccess('تم تسجيل المصروف! 📤',`${currentExpCat}: ${desc}\n💸 ${fmt(amt)} ريال`);
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{setBtn('saveExpBtn',false,'تسجيل المصروف 📤');}
+}
+async function loadExpensesList(){
+  const list=document.getElementById('expensesList');
+  list.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    expenses=await api('GET','/api/expenses');
+    if(!expenses.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">📤</div><div class="empty-text">لا توجد مصروفات</div></div>';return;}
+    const total=expenses.reduce((s,e)=>s+(e.amount||0),0);
+    list.innerHTML=`<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;"><div style="font-size:12px;color:var(--muted);">إجمالي المصروفات</div><div style="font-size:20px;font-weight:800;color:var(--red);">${fmt(total)} ريال</div></div>${expenses.map(e=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon red">${catIcons[e.category]||'📦'}</div><div class="list-item-info"><div class="list-item-name">${escHtml(e.description)}</div><div class="list-item-sub">${escHtml(e.category)}${e.unit_num?' · وحدة '+e.unit_num:''}</div></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="list-item-badge badge-red">${fmt(e.amount)} ريال</span><div class="action-btns"><button class="action-btn edit" onclick='openEditExpense(${JSON.stringify(e).replace(/'/g,"&#39;")})'>✏️</button><button class="action-btn del" onclick="deleteExpense('${e.id}','${escHtml(e.description).replace(/'/g,"\\'")}')">🗑️</button></div></div></div>`).join('')}`;
+  }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+
+function openEditExpense(e) {
+  document.getElementById('editExpId').value = e.id;
+  document.getElementById('editExpDesc').value = e.description || '';
+  document.getElementById('editExpAmount').value = e.amount || 0;
+  currentEditExpCat = e.category || 'أخرى';
+  document.querySelectorAll('#editExpense .cat-btn').forEach(b => {
+    b.className = 'cat-btn' + (b.dataset.cat === currentEditExpCat ? ' selected' : '');
+  });
+  setBtn('saveEditExpBtn', false, 'حفظ التعديلات ✏️');
+  goTo('editExpense');
+}
+let currentEditExpCat = 'أخرى';
+function selectEditExpCat(el, cat) {
+  currentEditExpCat = cat;
+  document.querySelectorAll('#editExpense .cat-btn').forEach(b => b.className = 'cat-btn');
+  el.className = 'cat-btn selected';
+}
+async function saveEditExpense() {
+  const id = document.getElementById('editExpId').value;
+  const desc = document.getElementById('editExpDesc').value.trim();
+  const amt = parseInt(document.getElementById('editExpAmount').value || 0);
+  if (!desc) { toast('⚠️ أدخل الوصف', 'error'); return; }
+  if (!amt) { toast('⚠️ أدخل المبلغ', 'error'); return; }
+  setBtn('saveEditExpBtn', true, 'جاري الحفظ...');
+  try {
+    await api('PUT', `/api/expenses/${id}`, { description: desc, amount: amt, category: currentEditExpCat });
+    toast('✅ تم تعديل المصروف');
+    goBack();
+  } catch(e) { toast('❌ ' + e.message, 'error'); }
+  finally { setBtn('saveEditExpBtn', false, 'حفظ التعديلات ✏️'); }
+}
+function deleteExpense(id, desc) {
+  confirm2('حذف المصروف', `سيتم حذف "${desc}" نهائياً.`, async () => {
+    try {
+      await api('DELETE', `/api/expenses/${id}`);
+      toast('✅ تم حذف المصروف');
+      loadExpensesList();
+    } catch(e) { toast('❌ ' + e.message, 'error'); }
+  });
+}
+
+// ============================================================
+// Reports
+// ============================================================
+async function loadReport(){
+  const c=document.getElementById('reportContent');
+  c.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    const [s,t,e]=await Promise.all([api('GET','/api/stats'),api('GET','/api/tenants'),api('GET','/api/expenses')]);
+    const total=t.reduce((s,x)=>s+(x.rent||0),0);
+    c.innerHTML=`<div class="report-summary"><div class="report-card"><div class="report-label">📥 إجمالي الواردات</div><div class="report-value teal">${fmt(total)}</div></div><div class="report-card"><div class="report-label">✅ المحصّل</div><div class="report-value green">${fmt(s.income)}</div></div><div class="report-card"><div class="report-label">📤 إجمالي المصروفات</div><div class="report-value red">${fmt(s.expenses)}</div></div><div class="report-card"><div class="report-label">💰 صافي الربح</div><div class="report-value ${(s.net||0)>=0?'gold':'red'}">${fmt(s.net)}</div></div></div><div class="section-divider">🧑‍💼 المستأجرون</div><div style="padding:0 16px 20px;">${t.map(x=>`<div class="list-item" style="cursor:default;"><div class="list-item-icon ${x.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${escHtml(x.name)}</div><div class="list-item-sub">${escHtml(x.properties?.name||'')} · وحدة ${x.unit_num} · ${escHtml(x.period_label||'')} · ${fmt(x.rent)} ريال${x.end_date?`<br>📅 ينتهي: ${escHtml(x.end_date)}`:''}</div></div><span class="list-item-badge ${x.paid?'badge-green':'badge-red'}">${x.paid?'دفع ✅':'لم يدفع ❌'}</span></div>`).join('')}</div>`;
+  }catch(e){c.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+async function exportPDF(){
+  setBtn('pdfBtn',true,'جاري التحضير...');
+  try{
+    const res=await fetch(`${API}/api/report/print`,{headers:{'Authorization':`Bearer ${jwtToken}`}});
+    if(!res.ok)throw new Error('فشل إنشاء التقرير');
+    const html=await res.text();
+    const win=window.open('','_blank');
+    if(win){win.document.write(html);win.document.close();}
+    else toast('⚠️ افتح التقرير من المتصفح','error');
+  }catch(e){toast('❌ '+e.message,'error');}
+  finally{setBtn('pdfBtn',false,'📄 PDF');}
+}
+async function loadPropReports(){
+  const c=document.getElementById('propReportsContent');
+  c.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    const [ap,at,ae,au]=await Promise.all([api('GET','/api/properties?include_deleted=true'),api('GET','/api/tenants'),api('GET','/api/expenses'),api('GET','/api/units')]);
+    if(!ap.length){c.innerHTML='<div class="empty-state"><div class="empty-icon">🏗️</div><div class="empty-text">لا يوجد عقارات</div></div>';return;}
+    c.innerHTML=ap.map(prop=>{
+      const isInv=prop.type==='مستثمر',pt=at.filter(t=>t.property_id===prop.id),pe=ae.filter(e=>e.property_id===prop.id),pu=au.filter(u=>u.property_id===prop.id);
+      const inc=pt.filter(t=>t.paid).reduce((s,t)=>s+(t.rent||0),0),tot=pt.reduce((s,t)=>s+(t.rent||0),0);
+      const exp=(isInv?(prop.investor_rent||0):0)+pe.reduce((s,e)=>s+(e.amount||0),0),net=inc-exp;
+      const units=pu.map(u=>{const ut=pt.find(t=>t.unit_num===u.unit_num),uI=ut?.paid?(ut.rent||0):0,uE=pe.filter(e=>e.unit_num===u.unit_num).reduce((s,e)=>s+(e.amount||0),0);return`<div class="unit-row"><div style="font-weight:700;font-size:13px;margin-bottom:6px;">${escHtml(u.unit_type)} رقم ${u.unit_num} · ${ut?escHtml(ut.name):'فارغة'} ${ut?(ut.paid?'✅':'❌'):''}</div><div class="unit-fin-grid"><div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--teal)">${fmt(ut?.rent||0)}</div><div class="unit-fin-lbl">📥 الإيجار</div></div><div class="unit-fin-cell"><div class="unit-fin-val" style="color:var(--red)">${fmt(uE)}</div><div class="unit-fin-lbl">📤 المصاريف</div></div><div class="unit-fin-cell"><div class="unit-fin-val" style="color:${uI-uE>=0?'var(--gold)':'var(--red)'}">${fmt(uI-uE)}</div><div class="unit-fin-lbl">💰 الصافي</div></div></div></div>`;}).join('');
+      return`<div class="prop-report-card"><div class="prop-report-header"><div><div style="font-size:15px;font-weight:700;color:#f1f5f9;">${isInv?'💼':'🏠'} ${escHtml(prop.name)}</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;">📍 ${escHtml(prop.location)}${isInv&&prop.contract_desc?' · عقد: '+escHtml(prop.contract_desc):''}</div></div><span style="background:${isInv?'rgba(245,158,11,.2)':'rgba(59,130,246,.2)'};color:${isInv?'var(--gold)':'var(--accent)'};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">${escHtml(prop.type)}</span></div><div class="prop-report-body"><div class="prop-financial-row"><div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--teal)">${fmt(tot)}</div><div class="prop-fin-label">📥 الإيجارات</div></div><div class="prop-fin-item"><div class="prop-fin-val" style="color:var(--red)">${fmt(exp)}</div><div class="prop-fin-label">📤 المصاريف</div></div><div class="prop-fin-item"><div class="prop-fin-val" style="color:${net>=0?'var(--gold)':'var(--red)'}">${fmt(net)}</div><div class="prop-fin-label">💰 الصافي</div></div></div>${isInv?`<div style="background:rgba(245,158,11,.08);border-radius:8px;padding:8px;font-size:12px;color:var(--muted);margin-bottom:10px;">💸 إيجار المالك: <strong style="color:var(--gold)">${fmt(prop.investor_rent)} ريال</strong></div>`:''}${pu.length?`<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">🚪 تفصيل الوحدات</div>${units}`:''}</div></div>`;
+    }).join('');
+  }catch(e){c.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+async function loadReminders(){
+  const list=document.getElementById('reminderList');
+  list.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    const t=await api('GET','/api/tenants');
+    const u=t.filter(x=>!x.paid);
+    if(!u.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-text">جميع المستأجرين دفعوا!</div></div>';return;}
+    list.innerHTML=u.map(x=>`<div class="list-item" style="cursor:default"><div class="list-item-icon red">🔔</div><div class="list-item-info"><div class="list-item-name">${escHtml(x.name)}</div><div class="list-item-sub">📱 ${escHtml(x.phone)} · ${escHtml(x.properties?.name||'')} · وحدة ${x.unit_num}<br>${escHtml(x.period_label||'')} · ${fmt(x.rent)} ريال${x.end_date?`<br>📅 ينتهي: ${escHtml(x.end_date)}`:''}</div></div><span class="list-item-badge badge-red">متأخر</span></div>`).join('');
+  }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+async function loadTenantList(){
+  const list=document.getElementById('tenantList');
+  list.innerHTML='<div class="loading">⏳ جاري التحميل...</div>';
+  try{
+    tenants=await api('GET','/api/tenants');
+    if(!tenants.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">لا يوجد مستأجرون</div></div>';return;}
+    list.innerHTML=tenants.map(t=>{
+      const es=expiryStatus(t.end_date);
+      const exBadge=es?`<span class="expiry-badge ${es.cls}">${escHtml(es.label)}</span>`:'';
+      // ✅ FIX #5: تمرير البيانات بشكل آمن عبر data attributes
+      return`<div class="list-item"><div class="list-item-icon ${t.paid?'green':'gold'}">🧑‍💼</div><div class="list-item-info"><div class="list-item-name">${escHtml(t.name)} ${exBadge}</div><div class="list-item-sub">📱 ${escHtml(t.phone)} · ${escHtml(t.properties?.name||'')} · وحدة ${t.unit_num}<br>${escHtml(t.period_label||'')} · ${fmt(t.rent)} ريال${t.start_date?`<br>📅 ${escHtml(t.start_date)}${t.end_date?' ← '+escHtml(t.end_date):''}`:''}</div></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="list-item-badge ${t.paid?'badge-green':'badge-red'}">${t.paid?'✅ دفع':'❌ لم يدفع'}</span><div class="action-btns"><button class="action-btn edit" onclick='openEditTenant(${JSON.stringify(t).replace(/'/g,"&#39;")})'>✏️</button><button class="action-btn del" onclick="deleteTenant('${t.id}','${escHtml(t.name).replace(/'/g,"\\'")}')">🗑️</button></div></div></div>`;
+    }).join('');
+  }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
+}
+
+function showSuccess(title,sub){
+  document.getElementById('successTitle').textContent=title;
+  document.getElementById('successSub').textContent=sub;
+  // لا نضيف success للـ nav حتى لا يرجع المستخدم لها بزر الرجوع
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('success').classList.add('active');
+  window.scrollTo(0,0);
+  nav=['home'];
+}
+
+
+// ════════════════════════════════════════════════════
+// 💳 نظام الاشتراك
+// ════════════════════════════════════════════════════
+function updateSubBanner() {
+  const title = document.getElementById('subBannerTitle');
+  const sub   = document.getElementById('subBannerSub');
+  if (!title || !sub) return;
+
+  const d = subData;
+  if (!d || d.status === 'none') {
+    title.textContent = '💳 اشتراكي';
+    sub.textContent   = 'لا يوجد اشتراك';
+    return;
+  }
+  if (d.status === 'free' || d.free_mode) {
+    title.textContent = '🆓 وصول مجاني';
+    sub.style.color   = 'var(--green)';
+    sub.textContent   = 'التطبيق مجاني حالياً — استمتع بكامل المميزات';
+  } else if (d.status === 'trial') {
+    title.textContent = '🎁 فترة تجريبية';
+    sub.style.color   = 'var(--gold)';
+    sub.textContent   = `${d.days_left} يوم متبقي من التجربة المجانية`;
+  } else if (d.status === 'active') {
+    title.textContent = '✅ اشتراك نشط';
+    sub.style.color   = 'var(--green)';
+    sub.textContent   = `${d.days_left} يوم متبقي · شهري`;
+  } else {
+    title.textContent = '⚠️ اشتراكي';
+    sub.style.color   = 'var(--red)';
+    sub.textContent   = 'انتهى الاشتراك — اضغط للتجديد';
+  }
+}
+
+async function loadSubscription() {
+  const c = document.getElementById('subContent');
+  c.innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
+  try {
+    const d = await api('GET', '/api/subscription/status');
+    subData  = d;
+    window._subFinalPrice = Number(d.final_price || 29);
+    updateSubBanner();
+
+    const statusColor = d.active
+      ? (d.status === 'free' || d.free_mode ? 'var(--green)' : d.status === 'trial' ? 'var(--gold)' : 'var(--green)')
+      : 'var(--red)';
+    const statusLabel = (d.status === 'free' || d.free_mode) ? '🆓 مجاني'
+                      : d.status === 'trial'  ? '🎁 تجريبي'
+                      : d.status === 'active' ? '✅ نشط'
+                      : '❌ منتهٍ';
+    const expiryText = d.expires_at
+      ? new Date(d.expires_at).toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})
+      : '—';
+    const isFree = d.status === 'free' || d.free_mode;
+
+    c.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px 20px;margin-bottom:16px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">${isFree ? '🆓' : d.active ? (d.status==='trial'?'🎁':'✅') : '🔒'}</div>
+        <div style="font-size:22px;font-weight:800;color:${statusColor};margin-bottom:6px;">${statusLabel}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+          ${isFree ? 'التطبيق مجاني حالياً — استمتع بكامل المميزات!' : d.active ? `<span style="color:${statusColor};font-weight:700">${d.days_left} يوم</span> متبقي — ينتهي ${escHtml(expiryText)}` : 'اشتراكك منتهٍ'}
+        </div>
+        ${d.active ? `<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px 16px;font-size:12px;color:var(--muted);">
+          ${isFree ? '🎉 جميع المميزات متاحة مجاناً' : 'يمكنك مشاهدة البيانات والتقارير'}
+          ${!isFree && d.status==='active'?'<br>الاشتراك يجدد تلقائياً كل شهر':''}
+        </div>` : ''}
+      </div>
+
+      ${!isFree ? `<div style="background:linear-gradient(135deg,#1e3a5f,#0f2030);border:1px solid #2a4a7f;border-radius:18px;padding:24px 20px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">📦 الخطة الشهرية</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">وصول كامل لجميع المميزات</div>
+          </div>
+          <div style="text-align:left;">
+            <div style="font-size:28px;font-weight:900;color:var(--gold);">${Number(d.final_price || 29)}</div>
+            <div style="font-size:11px;color:var(--muted);">ريال / شهر</div>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px;margin-bottom:20px;font-size:12px;color:#94a3b8;">
+          <div>✅ إدارة عقارات بلا حدود</div>
+          <div>✅ تقارير PDF قابلة للطباعة</div>
+          <div>✅ تذكيرات يومية عبر تيليجرام</div>
+          <div>✅ إحصائيات مالية شاملة</div>
+        </div>
+        <button class="submit-btn blue" id="payBtn" onclick="startCheckout()" style="width:100%;">
+          ${d.active ? '🔄 تجديد الاشتراك' : '💳 اشترك الآن — ' + Number(d.final_price || 29) + ' ريال/شهر'}
+        </button>
+      </div>
+
+      <div style="text-align:center;font-size:11px;color:var(--muted);line-height:1.8;padding:0 8px;">
+        الدفع عبر بوابة جيديا الآمنة 🔒<br>
+        مدى · فيزا · ماستركارد · أبل باي
+      </div>` : ''}`;
+  } catch(e) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;
+  }
+}
+
+async function startCheckout() {
+  const btn = document.getElementById('payBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ جاري التحضير... <span class="spinner"></span>'; }
+  try {
+    const d = await api('POST', '/api/subscription/checkout');
+    if (d.payment_url) {
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && tg.openLink) {
+        tg.openLink(d.payment_url);
+      } else {
+        window.open(d.payment_url, '_blank');
+      }
+      toast('✅ تم فتح صفحة الدفع — أكمل الدفع ثم ارجع هنا', 'success');
+      setTimeout(() => loadSubscription(), 8000);
+    } else {
+      toast('❌ فشل إنشاء رابط الدفع', 'error');
+    }
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = `💳 اشترك الآن — ${Number(window._subFinalPrice || 29)} ريال/شهر`; }
+  }
+}
+
+async function verifyAfterPayment(orderId) {
+  try {
+    toast('🔄 جاري التحقق من الدفع...', 'success');
+    const d = await api('GET', '/api/subscription/verify/' + orderId);
+    if (d.paid) {
+      subData.status  = 'active';
+      subData.active  = true;
+      updateSubBanner();
+      toast('🎉 تم تفعيل اشتراكك بنجاح!', 'success');
+      setTimeout(() => loadSubscription(), 1000);
+    } else {
+      toast('⏳ لم يتم تأكيد الدفع بعد — انتظر قليلاً', 'error');
+    }
+  } catch(e) {
+    console.log('verify error:', e.message);
+  }
+}
+
+function updateDateTime(){
+  const n=new Date();
+  const d=document.getElementById('currentDate'),t=document.getElementById('currentTime'),h=document.getElementById('hijriDate');
+  if(d)d.textContent=n.toLocaleDateString('ar-SA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  if(t)t.textContent='🕐 '+n.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  if(h)h.textContent='🌙 '+n.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'});
+}
+updateDateTime(); setInterval(updateDateTime,1000);
+buildMonthsGrid();
+
+// ============================================================
+// 🚀 Onboarding Wizard
+// ============================================================
+let _obPropType  = 'مالك';
+let _obPropId    = null;
+let _obUnits     = [];   // [{type, tempId}]
+let _obUnitCount = 0;
+let _obPropName  = '';
+
+// تحقق إذا المستخدم جديد (لا عقارات له)
+async function checkFirstTime() {
+  try {
+    const data = await api('GET', '/api/properties');
+    return data.length === 0;
+  } catch(e) {
+    return false;
+  }
+}
+
+// انطلق للـ Onboarding
+async function maybeShowOnboarding() {
+  const isNew = await checkFirstTime();
+  if (isNew) {
+    goTo('ob_welcome');
+  } else {
+    updateSubBanner();
+    goTo('home');
+  }
+}
+
+function obSkip() {
+  updateSubBanner();
+  goTo('home');
+}
+
+function obGoStep(step) {
+  const steps = {
+    1: 'ob_welcome',
+    2: 'ob_propType',
+    3: 'ob_propForm',
+    4: 'ob_units',
+    5: 'ob_tenant',
+    6: 'ob_done'
+  };
+  if (steps[step]) {
+    // ✅ بناء الملخص عند الانتقال لشاشة الإنهاء
+    if (step === 6 && _obPropName) obBuildSummary();
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(steps[step]).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+}
+
+function obSetPropType(type) {
+  _obPropType = type;
+  const isInv = type === 'مستثمر';
+  document.getElementById('obPropEmoji').textContent   = isInv ? '💼' : '🏠';
+  document.getElementById('obPropTitle').textContent   = isInv ? 'معلومات عقار المستثمر' : 'معلومات العقار';
+  document.getElementById('obInvestorBox').style.display = isInv ? 'block' : 'none';
+  // clear fields
+  document.getElementById('obPropName').value     = '';
+  document.getElementById('obPropLocation').value = '';
+  if (document.getElementById('obInvestorRent'))
+    document.getElementById('obInvestorRent').value = '';
+  obGoStep(3);
+}
+
+async function obSaveProperty() {
+  const name = document.getElementById('obPropName').value.trim();
+  const loc  = document.getElementById('obPropLocation').value.trim();
+  if (!name) { toast('⚠️ أدخل اسم العقار', 'error'); return; }
+  if (!loc)  { toast('⚠️ أدخل موقع العقار', 'error'); return; }
+
+  const isInv = _obPropType === 'مستثمر';
+  let investorRent = 0;
+  if (isInv) {
+    investorRent = parseInt(document.getElementById('obInvestorRent').value || 0);
+    if (!investorRent) { toast('⚠️ أدخل المبلغ المدفوع للمالك', 'error'); return; }
+  }
+
+  const btn = document.getElementById('obSavePropBtn');
+  btn.disabled = true; btn.textContent = 'جاري الحفظ...';
+  try {
+    const result = await api('POST', '/api/properties', {
+      name, location: loc, type: _obPropType,
+      investor_rent: investorRent, contract_desc: ''
+    });
+    _obPropId   = result.id;
+    _obPropName = name;
+    _obUnits    = [];
+    _obUnitCount = 0;
+    obRenderUnits();
+    obGoStep(4);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'حفظ والتالي ←';
+  }
+}
+
+function obAddUnit(type) {
+  _obUnitCount++;
+  _obUnits.push({ type, id: _obUnitCount });
+  obRenderUnits();
+}
+
+function obRemoveUnit(id) {
+  _obUnits = _obUnits.filter(u => u.id !== id);
+  obRenderUnits();
+}
+
+function obRenderUnits() {
+  const container = document.getElementById('obUnitsAdded');
+  if (!_obUnits.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;align-self:center;">لم تُضف وحدات بعد</div>';
+    return;
+  }
+  const icons = {شقة:'🏢',استديو:'🛋️',غرفة:'🛏️',استراحة:'🌴',شاليه:'🏖️',فله:'🏡'};
+  container.innerHTML = _obUnits.map((u, i) =>
+    `<div class="ob-unit-chip" onclick="obRemoveUnit(${u.id})">
+      ${icons[u.type] || '🚪'} ${u.type} ${i+1}
+      <span class="rm">✕</span>
+    </div>`
+  ).join('');
+}
+
+async function obSaveUnits() {
+  if (!_obUnits.length) { toast('⚠️ أضف وحدة واحدة على الأقل', 'error'); return; }
+  if (!_obPropId)       { toast('⚠️ خطأ — أعد تسجيل العقار', 'error'); obGoStep(2); return; }
+
+  const btn = document.getElementById('obSaveUnitsBtn');
+  btn.disabled = true; btn.textContent = 'جاري الحفظ...';
+  try {
+    for (let i = 0; i < _obUnits.length; i++) {
+      await api('POST', '/api/units', {
+        property_id: _obPropId,
+        unit_num: i + 1,
+        unit_type: _obUnits[i].type
+      });
+    }
+    obGoStep(5);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'حفظ الوحدات والتالي ←';
+  }
+}
+
+function obGoAddTenant() {
+  // انتقل لشاشة إضافة مستأجر بعد الـ Onboarding
+  obBuildSummary();
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('addTenant').classList.add('active');
+  window.scrollTo(0, 0);
+  renderTenantForm();
+  // بعد حفظ المستأجر يروح للـ ob_done
+  window._obAfterTenant = true;
+}
+
+function obBuildSummary() {
+  const icons = {شقة:'🏢',استديو:'🛋️',غرفة:'🛏️',استراحة:'🌴',شاليه:'🏖️',فله:'🏡'};
+  const unitsSummary = _obUnits.length
+    ? _obUnits.map(u => `${icons[u.type]||'🚪'} ${u.type}`).join(' · ')
+    : 'لا توجد وحدات';
+
+  document.getElementById('obSummaryCard').innerHTML = `
+    <div class="ob-summary-row">
+      <div class="ob-summary-icon">${_obPropType === 'مستثمر' ? '💼' : '🏠'}</div>
+      <div class="ob-summary-text">
+        <div class="ob-summary-label">العقار المضاف</div>
+        <div class="ob-summary-value">${escHtml(_obPropName)}</div>
+      </div>
+    </div>
+    <div class="ob-summary-row">
+      <div class="ob-summary-icon">🚪</div>
+      <div class="ob-summary-text">
+        <div class="ob-summary-label">الوحدات</div>
+        <div class="ob-summary-value">${_obUnits.length} وحدة · ${escHtml(unitsSummary)}</div>
+      </div>
+    </div>
+    <div class="ob-summary-row">
+      <div class="ob-summary-icon">🏷️</div>
+      <div class="ob-summary-text">
+        <div class="ob-summary-label">نوع الملكية</div>
+        <div class="ob-summary-value">${escHtml(_obPropType)}</div>
+      </div>
+    </div>`;
+
+  document.getElementById('obDoneSub').textContent = 'أنت الآن جاهز لإدارة عقاراتك 🎉';
+}
+
+function obFinish() {
+  updateSubBanner();
+  nav.length = 0;
+  goTo('home');
+}
+
+// ============================================================
+// 💡 اقتراحات
+// ============================================================
+let _suggestCat = '✨ ميزة جديدة';
+
+function selectSuggestCat(el, cat) {
+  _suggestCat = cat;
+  document.querySelectorAll('#suggest .cat-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function sendSuggestion() {
+  const text = (document.getElementById('suggestText').value || '').trim();
+  if (!text) { toast('⚠️ اكتب اقتراحك أولاً', 'error'); return; }
+  if (text.length < 10) { toast('⚠️ الاقتراح قصير جداً', 'error'); return; }
+
+  const btn = document.getElementById('sendSuggestBtn');
+  btn.disabled = true;
+  btn.innerHTML = 'جاري الإرسال... <span class="spinner"></span>';
+
+  try {
+    await api('POST', '/api/suggestion', { category: _suggestCat, text });
+    document.getElementById('suggestText').value = '';
+    // reset category
+    document.querySelectorAll('#suggest .cat-btn').forEach((b,i) => {
+      b.classList.toggle('selected', i === 0);
+    });
+    _suggestCat = '✨ ميزة جديدة';
+    goTo('successSuggest');
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'إرسال الاقتراح 🚀';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
