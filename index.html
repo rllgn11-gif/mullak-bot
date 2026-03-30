@@ -876,6 +876,10 @@ async function login() {
 async function init() {
   try {
     const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
+    // ✅ ربط زر الرجوع في تيليجرام
+    if (tg.BackButton) {
+      tg.BackButton.onClick(() => goBack());
+    }
     await login();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -908,6 +912,12 @@ function goTo(screen) {
     report:loadReport, propReports:loadPropReports, reminders:loadReminders, listTenants:loadTenantList,
     subscription:loadSubscription, listProperties:loadPropertyList, fullReset:null, editExpense:null };
   if (renders[screen]) renders[screen]();
+  // ✅ زر الرجوع في تيليجرام
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.BackButton) {
+    if (screen === 'home') tg.BackButton.hide();
+    else tg.BackButton.show();
+  }
 }
 function goBack() {
   nav.pop();
@@ -915,7 +925,24 @@ function goBack() {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(prev).classList.add('active');
   window.scrollTo(0,0);
-  if (prev === 'home') loadHome();
+  // ✅ إعادة تحميل البيانات عند الرجوع لشاشات القوائم
+  const reloaders = {
+    home: loadHome,
+    listProperties: loadPropertyList,
+    listTenants: loadTenantList,
+    listExpenses: loadExpensesList,
+    paid: loadPaidList,
+    report: loadReport,
+    propReports: loadPropReports,
+    reminders: loadReminders
+  };
+  if (reloaders[prev]) reloaders[prev]();
+  // ✅ زر الرجوع في تيليجرام
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.BackButton) {
+    if (prev === 'home') tg.BackButton.hide();
+    else tg.BackButton.show();
+  }
 }
 
 // ============================================================
@@ -923,6 +950,7 @@ function goBack() {
 // ============================================================
 async function loadHome() {
   try {
+    updateSubBanner();
     const s = await cachedApi('GET', '/api/stats');
     document.getElementById('statProps').textContent    = s.props    ?? 0;
     document.getElementById('statTenants').textContent  = s.tenants  ?? 0;
@@ -1189,8 +1217,11 @@ async function selectUnit(type){
   document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='none');
   try{
     const units=await api('GET',`/api/units?property_id=${selectedPropId}`);
-    await api('POST','/api/units',{property_id:selectedPropId,unit_num:units.length+1,unit_type:type});
-    showSuccess('تم إضافة الوحدة! 🚪',`${type} رقم ${units.length+1}`);
+    // ✅ حساب رقم الوحدة التالي بناءً على أعلى رقم موجود
+    const maxNum = units.length ? Math.max(...units.map(u=>parseInt(u.unit_num)||0)) : 0;
+    const nextNum = maxNum + 1;
+    await api('POST','/api/units',{property_id:selectedPropId,unit_num:nextNum,unit_type:type});
+    showSuccess('تم إضافة الوحدة! 🚪',`${type} رقم ${nextNum}`);
   }catch(e){toast('❌ '+e.message,'error');}
   finally{document.querySelectorAll('.unit-card').forEach(c=>c.style.pointerEvents='');}
 }
@@ -1221,6 +1252,10 @@ async function renderTenantForm(){
     sel.innerHTML='<option value="">اختر العقار</option>';
     props.forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${escHtml(p.name)} (${escHtml(p.type)})</option>`;});
     document.getElementById('tenantUnit').innerHTML='<option value="">اختر الوحدة</option>';
+    document.getElementById('tenantName').value='';
+    document.getElementById('tenantPhone').value='';
+    document.getElementById('tenantRent').value='';
+    document.getElementById('tenantCount').value='1';
     document.getElementById('tenantStartDate').value=today();
     currentTenantPeriod='يوم';setTenantPeriod('يوم');
     currentCheckoutTime='14:00';setCheckoutTime('14:00');
@@ -1333,10 +1368,6 @@ async function saveEditTenant(){
     await api('PUT',`/api/tenants/${id}`,{name,phone,rent,paid:editPaidStatus,start_date:sd||null,end_date:ed||null});
     toast('✅ تم تعديل بيانات المستأجر');
     goBack();
-    // إعادة تحميل قائمة المستأجرين إن كنا فيها
-    const currentScreen = nav[nav.length-1];
-    if (currentScreen === 'listTenants') loadTenantList();
-    else if (currentScreen === 'listProperties') loadPropertyList();
   }catch(e){toast('❌ '+e.message,'error');}
   finally{setBtn('saveEditTenantBtn',false,'حفظ التعديلات ✏️');}
 }
@@ -1366,7 +1397,10 @@ async function markPaid(id,name,rent,pl){
   try{
     await api('POST',`/api/tenants/${id}/pay`);
     document.getElementById('paidSuccessSub').textContent=`${name}\n${pl} · ${fmt(rent)} ريال\n\nهل تريد تسجيل مصروف مرتبط؟`;
-    goTo('paidSuccess');
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('paidSuccess').classList.add('active');
+    window.scrollTo(0,0);
+    nav=['home'];
   }catch(e){toast('❌ '+e.message,'error');}
 }
 
@@ -1380,6 +1414,8 @@ async function renderExpenseForm(){
     sel.innerHTML='<option value="">— غير مرتبط —</option>';
     props.forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${escHtml(p.name)}</option>`;});
     document.getElementById('expUnit').innerHTML='<option value="">— غير مرتبط —</option>';
+    document.getElementById('expDesc').value='';
+    document.getElementById('expAmount').value='';
     currentExpCat='صيانة';
     document.querySelectorAll('.cat-btn').forEach((b,i)=>b.className='cat-btn'+(i===0?' selected':''));
     setBtn('saveExpBtn',false,'تسجيل المصروف 📤');
@@ -1524,7 +1560,15 @@ async function loadTenantList(){
   }catch(e){list.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">${escHtml(e.message)}</div></div>`;}
 }
 
-function showSuccess(title,sub){document.getElementById('successTitle').textContent=title;document.getElementById('successSub').textContent=sub;goTo('success');}
+function showSuccess(title,sub){
+  document.getElementById('successTitle').textContent=title;
+  document.getElementById('successSub').textContent=sub;
+  // لا نضيف success للـ nav حتى لا يرجع المستخدم لها بزر الرجوع
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('success').classList.add('active');
+  window.scrollTo(0,0);
+  nav=['home'];
+}
 
 
 // ════════════════════════════════════════════════════
@@ -1722,6 +1766,8 @@ function obGoStep(step) {
     6: 'ob_done'
   };
   if (steps[step]) {
+    // ✅ بناء الملخص عند الانتقال لشاشة الإنهاء
+    if (step === 6 && _obPropName) obBuildSummary();
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(steps[step]).classList.add('active');
     window.scrollTo(0, 0);

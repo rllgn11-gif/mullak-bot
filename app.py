@@ -949,12 +949,13 @@ def add_tenant(user):
             "period_label": d.get("period_label", ""),
             "paid":         False
         }
-        if d.get("start_date"): row["start_date"] = d["start_date"]
-        if d.get("end_date"):   row["end_date"]   = d["end_date"]
+        if d.get("start_date"):    row["start_date"]    = d["start_date"]
+        if d.get("end_date"):      row["end_date"]      = d["end_date"]
+        if d.get("checkout_time"): row["checkout_time"]  = d["checkout_time"]
         result = sb_insert("tenants", row)
         sb_update("units",
-            {"property_id": f"eq.{d['property_id']}",
-             "unit_num":    f"eq.{d['unit_num']}",
+            {"property_id": f"eq.{prop_id}",
+             "unit_num":    f"eq.{d.get('unit_num')}",
              "user_id":     f"eq.{user['user_id']}"},
             {"tenant_name": d["name"]})
         return jsonify(result)
@@ -968,7 +969,7 @@ def edit_tenant(user, tenant_id):
     try:
         d       = request.json or {}
         allowed = ["name", "phone", "rent", "period", "period_count",
-                   "period_label", "start_date", "end_date", "paid"]
+                   "period_label", "start_date", "end_date", "paid", "checkout_time"]
         updates = {k: d[k] for k in allowed if k in d}
         result  = sb_update("tenants",
             {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"}, updates)
@@ -978,11 +979,12 @@ def edit_tenant(user, tenant_id):
                 select="property_id,unit_num")
             if tenant_data:
                 t = tenant_data[0]
-                sb_update("units",
-                    {"property_id": f"eq.{t['property_id']}",
-                     "unit_num":    f"eq.{t['unit_num']}",
-                     "user_id":     f"eq.{user['user_id']}"},
-                    {"tenant_name": d["name"]})
+                if t.get("property_id") and t.get("unit_num") is not None:
+                    sb_update("units",
+                        {"property_id": f"eq.{t['property_id']}",
+                         "unit_num":    f"eq.{t['unit_num']}",
+                         "user_id":     f"eq.{user['user_id']}"},
+                        {"tenant_name": d["name"]})
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -997,11 +999,12 @@ def delete_tenant(user, tenant_id):
             select="property_id,unit_num")
         if data:
             t = data[0]
-            sb_update("units",
-                {"property_id": f"eq.{t['property_id']}",
-                 "unit_num":    f"eq.{t['unit_num']}",
-                 "user_id":     f"eq.{user['user_id']}"},
-                {"tenant_name": None})
+            if t.get("property_id") and t.get("unit_num") is not None:
+                sb_update("units",
+                    {"property_id": f"eq.{t['property_id']}",
+                     "unit_num":    f"eq.{t['unit_num']}",
+                     "user_id":     f"eq.{user['user_id']}"},
+                    {"tenant_name": None})
         sb_delete("tenants", {"id": f"eq.{tenant_id}", "user_id": f"eq.{user['user_id']}"})
         return jsonify({"ok": True})
     except Exception as e:
@@ -1459,7 +1462,8 @@ def print_report(user):
     try:
         uid      = user["user_id"]
         fname    = esc(user.get("first_name", ""))
-        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
+        all_props = sb_select("properties", {"user_id": f"eq.{uid}"})
+        props    = [p for p in all_props if p.get("type") != "مؤرشف"]
         tenants  = sb_select("tenants",    {"user_id": f"eq.{uid}"}, select="*,properties(name)")
         expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"}, order="created_at.desc")
 
