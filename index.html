@@ -576,10 +576,9 @@
       <div class="note-text">سيتم حذف جميع البيانات نهائياً:<br>• جميع العقارات<br>• جميع الوحدات<br>• جميع المستأجرين<br>• جميع المصروفات<br>• جميع الواردات<br><br>لا يمكن التراجع عن هذا الإجراء!</div>
     </div>
     <div class="form-group">
-      <label class="form-label">أدخل رمز التأكيد (من 1 إلى 8 أرقام)</label>
-      <input class="form-input" id="resetPin" placeholder="الرمز: 12345678" type="number" maxlength="8" style="text-align:center;font-size:24px;letter-spacing:8px;">
+      <label class="form-label">للتأكيد أدخل: 12345678</label>
+      <input class="form-input" id="resetPin" placeholder="أدخل رمز التأكيد" type="number" maxlength="8" style="text-align:center;font-size:24px;letter-spacing:8px;">
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;">الرمز الصحيح: <span style="color:var(--red);font-weight:700;">12345678</span></div>
     <button class="submit-btn red" id="resetBtn" onclick="executeFullReset()">🗑️ حذف الكل نهائياً</button>
     <button class="submit-btn outline" style="margin-top:10px;" onclick="goBack()">إلغاء</button>
   </div>
@@ -806,6 +805,10 @@ async function api(method, path, body, _retryCount) {
   const retries = _retryCount || 0;
   const headers = { 'Content-Type': 'application/json' };
   if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+  // ✅ مسح الكاش عند أي عملية كتابة
+  if (method !== 'GET') {
+    Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+  }
   const res  = await fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -852,9 +855,11 @@ async function login() {
   if (!res.ok) throw new Error(data.error || 'فشل التحقق');
 
   jwtToken = data.token;
+  const isActiveStatus = data.sub_status && data.sub_status !== 'none' && data.sub_status !== 'expired';
+  const hasValidExpiry = data.sub_expires && new Date(data.sub_expires) > new Date();
   subData  = {
     status:    data.sub_status  || 'none',
-    active:    data.sub_status  && data.sub_status !== 'none' && (data.sub_days || 0) > 0,
+    active:    isActiveStatus && (hasValidExpiry || (data.sub_days || 0) > 0),
     days_left: data.sub_days   || 0,
     expires:   data.sub_expires || '',
     free_mode: data.sub_status === 'free'
@@ -1152,10 +1157,13 @@ function openFullReset() {
 async function executeFullReset() {
   const pin = document.getElementById('resetPin').value.trim();
   if (!pin) { toast('⚠️ أدخل الرمز', 'error'); return; }
+  if (pin !== '12345678') { toast('⚠️ رمز التأكيد غير صحيح', 'error'); return; }
   setBtn('resetBtn', true, 'جاري الحذف...');
   try {
-    await api('POST', '/api/tenants/reset', { pin });
-    toast('✅ تم إعادة ضبط التطبيق بالكامل');
+    await api('POST', '/api/full-reset', { pin });
+    // مسح الكاش
+    Object.keys(_apiCache).forEach(k => delete _apiCache[k]);
+    toast('✅ تم حذف جميع البيانات بنجاح');
     document.getElementById('resetPin').value = '';
     goTo('home');
     loadHome();
@@ -1324,7 +1332,11 @@ async function saveEditTenant(){
   try{
     await api('PUT',`/api/tenants/${id}`,{name,phone,rent,paid:editPaidStatus,start_date:sd||null,end_date:ed||null});
     toast('✅ تم تعديل بيانات المستأجر');
-    goBack();goBack();
+    goBack();
+    // إعادة تحميل قائمة المستأجرين إن كنا فيها
+    const currentScreen = nav[nav.length-1];
+    if (currentScreen === 'listTenants') loadTenantList();
+    else if (currentScreen === 'listProperties') loadPropertyList();
   }catch(e){toast('❌ '+e.message,'error');}
   finally{setBtn('saveEditTenantBtn',false,'حفظ التعديلات ✏️');}
 }

@@ -98,6 +98,18 @@ def options(path):
 # ============================================================
 _rate_data = defaultdict(list)
 _rate_lock = threading.Lock()
+_rate_last_cleanup = time.time()
+
+def _cleanup_rate_data():
+    """تنظيف المفاتيح المنتهية من الذاكرة كل 5 دقائق"""
+    global _rate_last_cleanup
+    now = time.time()
+    if now - _rate_last_cleanup < 300:
+        return
+    _rate_last_cleanup = now
+    expired_keys = [k for k, v in _rate_data.items() if not v or now - max(v) > 300]
+    for k in expired_keys:
+        del _rate_data[k]
 
 def rate_limit(max_calls: int, period: int):
     def decorator(f):
@@ -107,6 +119,7 @@ def rate_limit(max_calls: int, period: int):
             key = f"{f.__name__}:{ip}"
             now = time.time()
             with _rate_lock:
+                _cleanup_rate_data()
                 calls = [t for t in _rate_data[key] if now - t < period]
                 if len(calls) >= max_calls:
                     return jsonify({"error": "طلبات كثيرة — انتظر قليلاً"}), 429
@@ -506,7 +519,12 @@ def get_properties(user):
         page  = max(1, int(request.args.get("page", 1)))
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
-        data = sb_select("properties", {"user_id": f"eq.{user['user_id']}"},
+        filters = {"user_id": f"eq.{user['user_id']}"}
+        # ✅ فلترة العقارات المؤرشفة إلا إذا طُلب إظهارها
+        include_deleted = request.args.get("include_deleted", "").lower() == "true"
+        if not include_deleted:
+            filters["type"] = "neq.مؤرشف"
+        data = sb_select("properties", filters,
                          limit=limit, offset=offset)
         return jsonify(data)
     except Exception as e:
@@ -553,36 +571,33 @@ def edit_property(user, prop_id):
 def delete_property(user, prop_id):
     try:
         uid = user["user_id"]
-        # ✅ FIX #13: حذف تتابعي — حذف الوحدات والمستأجرين والمصروفات المرتبطة
-        # أولاً: حذف المستأجرين المرتبطين
-        try:
-            tenants = sb_select("tenants",
-                {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
-            for t in tenants:
-                sb_delete("tenants",
-                    {"id": f"eq.{t['id']}", "user_id": f"eq.{uid}"})
-        except Exception as e:
-            print(f"⚠️ cascade delete tenants: {e}")
+        # ✅ أرشفة ناعمة — نغيّر النوع إلى "مؤرشف" بدلاً من الحذف النهائي
+        # هذا يحافظ على البيانات المالية في التقارير
 
-        # ثانياً: حذف الوحدات المرتبطة
-        try:
-            sb_delete("units",
-                {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
-        except Exception as e:
-            print(f"⚠️ cascade delete units: {e}")
+        # التحقق من أن العقار موجود وتابع للمستخدم
+        prop_check = sb_select("properties", {
+            "id": f"eq.{prop_id}",
+            "user_id": f"eq.{uid}"
+        })
+        if not prop_check:
+            return jsonify({"error": "العقار غير موجود"}), 404
 
-        # ثالثاً: حذف المصروفات المرتبطة (أو إزالة الارتباط)
+        original_type = prop_check[0].get("type", "مالك")
+
+        # تحديث العقار ليصبح مؤرشفاً مع حفظ النوع الأصلي
+        sb_update("properties",
+            {"id": f"eq.{prop_id}", "user_id": f"eq.{uid}"},
+            {"type": "مؤرشف", "contract_desc": f"نوع سابق: {original_type}"})
+
+        # إزالة أسماء المستأجرين من الوحدات (تحرير الوحدات)
         try:
-            sb_update("expenses",
+            sb_update("units",
                 {"property_id": f"eq.{prop_id}", "user_id": f"eq.{uid}"},
-                {"property_id": None, "unit_num": None})
-        except Exception as e:
-            print(f"⚠️ cascade unlink expenses: {e}")
+                {"tenant_name": None})
+        except Exception:
+            pass
 
-        # أخيراً: حذف العقار نفسه
-        sb_delete("properties",
-            {"id": f"eq.{prop_id}", "user_id": f"eq.{uid}"})
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "archived": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -596,7 +611,46 @@ def get_units(user):
         filters = {"user_id": f"eq.{user['user_id']}"}
         prop_id = request.args.get("property_id")
         if prop_id: filters["property_id"] = f"eq.{prop_id}"
-        return jsonify(sb_select("units", filters))
+        units = sb_select("units", filters)
+
+        # ✅ إضافة بيانات المستأجر (end_date + expired) لكل وحدة
+        if prop_id and units:
+            try:
+                tenants = sb_select("tenants", {
+                    "user_id": f"eq.{user['user_id']}",
+                    "property_id": f"eq.{prop_id}"
+                }, select="unit_num,end_date,checkout_time,name")
+                tenant_map = {}
+                for t in tenants:
+                    tenant_map[str(t.get("unit_num"))] = t
+
+                now = datetime.now(timezone.utc)
+                for u in units:
+                    t = tenant_map.get(str(u.get("unit_num")))
+                    if t:
+                        u["tenant_end_date"] = t.get("end_date")
+                        # تحقق من انتهاء العقد
+                        end_date = t.get("end_date")
+                        if end_date:
+                            co_time = str(t.get("checkout_time") or "14:00")
+                            try:
+                                co_hour = int(co_time.split(":")[0])
+                            except Exception:
+                                co_hour = 14
+                            today_str = now.date().isoformat()
+                            if today_str > end_date or (today_str == end_date and now.hour >= co_hour):
+                                u["expired"] = True
+                            else:
+                                u["expired"] = False
+                        else:
+                            u["expired"] = False
+                    else:
+                        u["tenant_end_date"] = None
+                        u["expired"] = False
+            except Exception as e:
+                print(f"⚠️ enrich units: {e}")
+
+        return jsonify(units)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -975,6 +1029,52 @@ def reset_tenants(user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ✅ إعادة ضبط كامل — يحذف جميع بيانات المستخدم
+@app.route("/api/full-reset", methods=["POST"])
+@require_auth
+@require_write
+@rate_limit(max_calls=3, period=300)
+def full_reset(user):
+    try:
+        d = request.json or {}
+        pin = str(d.get("pin", "")).strip()
+        if pin != "12345678":
+            return jsonify({"error": "رمز التأكيد غير صحيح"}), 400
+
+        uid = user["user_id"]
+        errors = []
+
+        # 1. حذف المستأجرين
+        try:
+            sb_delete("tenants", {"user_id": f"eq.{uid}"})
+        except Exception as e:
+            errors.append(f"tenants: {e}")
+
+        # 2. حذف الوحدات
+        try:
+            sb_delete("units", {"user_id": f"eq.{uid}"})
+        except Exception as e:
+            errors.append(f"units: {e}")
+
+        # 3. حذف المصروفات
+        try:
+            sb_delete("expenses", {"user_id": f"eq.{uid}"})
+        except Exception as e:
+            errors.append(f"expenses: {e}")
+
+        # 4. حذف العقارات
+        try:
+            sb_delete("properties", {"user_id": f"eq.{uid}"})
+        except Exception as e:
+            errors.append(f"properties: {e}")
+
+        if errors:
+            print(f"⚠️ Full reset partial errors for {uid}: {errors}")
+
+        return jsonify({"ok": True, "message": "تم حذف جميع البيانات"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ============================================================
 # 📤 المصروفات
 # ============================================================
@@ -1010,6 +1110,22 @@ def add_expense(user):
             "property_id": d.get("property_id") or None,
             "unit_num":    d.get("unit_num") or None
         })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/expenses/<exp_id>", methods=["PUT"])
+@require_auth
+@require_write
+def edit_expense(user, exp_id):
+    try:
+        d = request.json or {}
+        allowed = ["category", "description", "amount", "property_id", "unit_num"]
+        updates = {k: d[k] for k in allowed if k in d}
+        if not updates:
+            return jsonify({"error": "لا يوجد تعديلات"}), 400
+        result = sb_update("expenses",
+            {"id": f"eq.{exp_id}", "user_id": f"eq.{user['user_id']}"}, updates)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
