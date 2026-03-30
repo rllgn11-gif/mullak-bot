@@ -261,14 +261,8 @@ def get_subscription(user_id: str):
         return None
 
 def sub_is_active(user_id: str):
-    sub = get_subscription(user_id)
-    if not sub or not sub.get("expires_at"):
-        return False
-    try:
-        exp_dt = datetime.fromisoformat(sub["expires_at"].replace("Z", "+00:00"))
-        return datetime.now(timezone.utc) < exp_dt
-    except Exception:
-        return False
+    # ✅ الاشتراكات مجانية حالياً
+    return True
 
 def sub_days_left(user_id: str):
     sub = get_subscription(user_id)
@@ -429,23 +423,28 @@ def auth():
 
     token = create_jwt(user_id, first_name)
 
-    sub_status, sub_expires, sub_days = "none", None, 0
+    sub_status, sub_expires, sub_days = "free", None, 9999
     try:
         existing_sub = get_subscription(user_id)
         if not existing_sub:
-            trial_exp = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).isoformat()
+            # ✅ إنشاء اشتراك مجاني
             sb_insert("subscriptions", {
                 "user_id":    user_id,
-                "plan":       "trial",
-                "status":     "trial",
-                "expires_at": trial_exp,
+                "plan":       "free",
+                "status":     "free",
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat(),
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
-            sub_status, sub_expires, sub_days = "trial", trial_exp, TRIAL_DAYS
         else:
-            sub_status  = existing_sub.get("status", "none")
-            sub_expires = existing_sub.get("expires_at")
-            sub_days    = sub_days_left(user_id)
+            # ✅ تحديث الاشتراك الحالي ليكون مجاني
+            if existing_sub.get("status") != "free":
+                try:
+                    sb_update("subscriptions",
+                        {"user_id": f"eq.{user_id}"},
+                        {"status": "free", "plan": "free",
+                         "expires_at": (datetime.now(timezone.utc) + timedelta(days=3650)).isoformat()})
+                except Exception:
+                    pass
     except Exception as e:
         print(f"Sub init error: {e}")
 
@@ -520,12 +519,12 @@ def get_properties(user):
         limit = min(int(request.args.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
         offset = (page - 1) * limit
         filters = {"user_id": f"eq.{user['user_id']}"}
-        # ✅ فلترة العقارات المؤرشفة إلا إذا طُلب إظهارها
-        include_deleted = request.args.get("include_deleted", "").lower() == "true"
-        if not include_deleted:
-            filters["type"] = "neq.مؤرشف"
         data = sb_select("properties", filters,
                          limit=limit, offset=offset)
+        # ✅ FIX: فلترة العقارات المؤرشفة في Python لتجنب مشكلة NULL في PostgREST
+        include_deleted = request.args.get("include_deleted", "").lower() == "true"
+        if not include_deleted:
+            data = [p for p in data if p.get("type") != "مؤرشف"]
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -758,7 +757,8 @@ def smart_tenant_preview(user):
         if not text:
             return jsonify({"error": "النص مطلوب"}), 400
 
-        props = sb_select("properties", {"user_id": f"eq.{user['user_id']}", "type": "neq.محذوف"})
+        props = sb_select("properties", {"user_id": f"eq.{user['user_id']}"})
+        props = [p for p in props if p.get("type") not in ("مؤرشف", "محذوف")]
         preview = {
             "name": "",
             "phone": "",
@@ -1148,7 +1148,8 @@ def delete_expense(user, exp_id):
 def get_stats(user):
     try:
         uid      = user["user_id"]
-        props    = sb_select("properties", {"user_id": f"eq.{uid}"})
+        all_props = sb_select("properties", {"user_id": f"eq.{uid}"})
+        props    = [p for p in all_props if p.get("type") != "مؤرشف"]
         tenants  = sb_select("tenants",    {"user_id": f"eq.{uid}"})
         expenses = sb_select("expenses",   {"user_id": f"eq.{uid}"})
         income   = sum(t["rent"] for t in tenants if t.get("paid"))
@@ -1172,17 +1173,14 @@ def get_stats(user):
 @require_auth
 def subscription_status(user):
     try:
-        sub = get_subscription(user["user_id"])
-        if not sub:
-            return jsonify({"status": "none", "active": False, "days_left": 0})
-        active = sub_is_active(user["user_id"])
-        days   = sub_days_left(user["user_id"])
+        # ✅ الاشتراكات مجانية حالياً
         return jsonify({
-            "status":     sub.get("status", "none"),
-            "plan":       sub.get("plan", ""),
-            "active":     active,
-            "expires_at": sub.get("expires_at", ""),
-            "days_left":  days,
+            "status":     "free",
+            "plan":       "free",
+            "active":     True,
+            "expires_at": "",
+            "days_left":  9999,
+            "free_mode":  True,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
