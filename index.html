@@ -941,7 +941,16 @@ async function login() {
   }
 }
 
-async function init() {
+async function init(retryCount) {
+  const attempt = retryCount || 1;
+  const maxRetries = 4;
+
+  const splashEl = document.getElementById('splash');
+  if (splashEl && attempt > 1) {
+    const subEl = splashEl.querySelector('.splash-sub');
+    if (subEl) subEl.textContent = `جاري الاتصال... (المحاولة ${attempt}/${maxRetries})`;
+  }
+
   try {
     const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
     await login();
@@ -959,14 +968,23 @@ async function init() {
       setTimeout(() => { maybeShowOnboarding(); }, 600);
     }
   } catch(e) {
-    console.error('Login failed:', e.message);
-    if (e.message !== 'ليس داخل تيليجرام') {
+    console.error('Login failed attempt ' + attempt + ':', e.message);
+    if (e.message === 'ليس داخل تيليجرام') return;
+
+    if (attempt < maxRetries) {
+      const splashEl2 = document.getElementById('splash');
+      if (splashEl2) {
+        const subEl2 = splashEl2.querySelector('.splash-sub');
+        if (subEl2) subEl2.textContent = 'فشل الاتصال — إعادة المحاولة خلال 5 ثوانٍ...';
+      }
+      setTimeout(() => init(attempt + 1), 5000);
+    } else {
       document.getElementById('splash').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;gap:16px;">
           <div style="font-size:56px">⚠️</div>
           <div style="font-size:20px;font-weight:800;color:#f1f5f9;">تعذّر الاتصال بالخادم</div>
-          <div style="font-size:14px;color:#64748b;line-height:1.8;">${e.message || 'تحقق من اتصالك بالإنترنت وأعد المحاولة'}</div>
-          <button onclick="init()" style="margin-top:12px;padding:14px 28px;background:#3b82f6;color:#fff;border:none;border-radius:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">🔄 إعادة المحاولة</button>
+          <div style="font-size:14px;color:#64748b;line-height:1.8;">${e.message || 'تحقق من اتصالك بالإنترنت'}</div>
+          <button onclick="init(1)" style="margin-top:12px;padding:14px 28px;background:#3b82f6;color:#fff;border:none;border-radius:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">🔄 إعادة المحاولة</button>
         </div>`;
     }
   }
